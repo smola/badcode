@@ -50,10 +50,10 @@ def walk_history(repo: pygit2.Repository, commit_id: pygit2.Oid) -> typing.Gener
 
 def extract_changes(commit: pygit2.Commit, languages=['Go']) -> typing.Generator[Change,None,None]:
     if len(commit.parents) == 0:
-        logging.debug('skip commit with no parents', extra={'commit': commit.id})
+        logging.debug('skip commit with no parents: %s' % {'commit': commit.id})
         return
     if len(commit.parents) > 2:
-        logging.debug('skip merge commit', extra={'commit': commit.id})
+        logging.debug('skip merge commit: %s' % {'commit': commit.id})
         return
     parent = commit.parents[0]
     diff = commit.tree.diff_to_tree(
