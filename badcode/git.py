@@ -77,12 +77,3 @@ def extract_changes(commit: pygit2.Commit, languages=['Go']) -> typing.Generator
         for hunk in patch.hunks:
             lines += [line.old_lineno for line in hunk.lines if line.new_lineno == -1]
         yield Change(old_path=old_path, old_blob_hash=old_blob_hash, deleted_lines=lines)
-
-if __name__ == '__main__':
-    import sys
-    repo = open_repository(sys.argv[1])
-    head = get_reference(repo, 'refs/heads/master')
-    print(type(head))
-    for commit in walk_history(repo, head.id):
-        for ch in extract_changes(commit):
-            print(ch)
