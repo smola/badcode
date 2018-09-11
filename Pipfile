@@ -1,0 +1,13 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pygit2 = '==0.27.0'
+
+[dev-packages]
+pylint = "*"
+
+[requires]
+python_version = "3.6"
