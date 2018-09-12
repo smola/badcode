@@ -16,4 +16,4 @@ make
 make install
 
 export LDFLAGS="-Wl,-rpath='$LIBGIT2/lib',--enable-new-dtags $LDFLAGS"
-pip install pygit2
+pip install pygit2==0.27.0
