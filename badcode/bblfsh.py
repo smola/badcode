@@ -110,6 +110,17 @@ def is_relevant_tree(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
             return True
     return False
 
+def get_start_end_lines(uast: bblfsh.Node) -> (int, int):
+    start = uast.start_position.line
+    end = uast.end_position.line
+    for child in uast.children:
+        cstart, cend = get_start_end_lines(child)
+        if start == 0 or cstart < start:
+            start = cstart
+        if end == 0 or cend > end:
+            end = cend
+    return start, end
+
 def filter_node(uast: bblfsh.Node) -> None:
     while len(uast.roles) > 0:
         uast.roles.pop()

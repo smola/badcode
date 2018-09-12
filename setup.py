@@ -5,7 +5,8 @@ setup(
     entry_points={
         'console_scripts': [
             'badcode = badcode.main:main',
-            'badcode-analyze = badcode.analyze:main'
+            'badcode-analyze = badcode.analyze:main',
+            'badcode-eval = badcode.eval:main'
         ],
     }
 )
