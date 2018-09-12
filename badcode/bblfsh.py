@@ -13,7 +13,7 @@ def extract_node(node: bblfsh.Node) -> Node:
     return Node(lines=range(node.start_position.line, node.end_position.line + 1))
         
 
-def extract_leaves(uast: bblfsh.Node, lines: typing.List[int]) -> typing.Tuple[typing.List[bblfsh.Node], typing.Dict[bblfsh.Node]]:
+def extract_leaves(uast: bblfsh.Node, lines: typing.List[int]) -> typing.Tuple[typing.List[bblfsh.Node], typing.Dict[int, bblfsh.Node]]:
     leaves = []
     parents = {}
     root = extract_node(uast)
@@ -38,12 +38,15 @@ def extract_subtrees(uast: bblfsh.Node, max_depth: int, lines: typing.Iterable[i
     if not isinstance(lines, set):
         lines = set(lines)
 
+    already_extracted = set()
     leaves, parents = extract_leaves(uast, lines)
     for leaf in leaves:
         depth = 1
         node = leaf
-        while depth < depth and id(node) in parents:
+        while depth < max_depth and id(node) in parents:
             parent = parents[id(node)]
             node = parent
             depth += 1
-        yield node
+        if id(node) not in already_extracted:
+            already_extracted.add(id(node))
+            yield node
