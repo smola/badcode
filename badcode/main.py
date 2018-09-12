@@ -6,6 +6,7 @@ import bblfsh
 
 from .bblfsh import *
 from .git import *
+from .stats import *
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -13,6 +14,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_SUBTREE_DEPTH = 4
 
 def main():
+    bblfsh_monkey_patch()
+    stats = Stats()
     client = bblfsh.BblfshClient("0.0.0.0:9432")
     repo = open_repository(sys.argv[1])
     head = get_reference(repo, 'refs/heads/master')
@@ -28,6 +31,8 @@ def main():
             logging.debug('got bblfsh response')
             for subtree in extract_subtrees(response.uast, max_depth=DEFAULT_MAX_SUBTREE_DEPTH, lines=change.deleted_lines):
                 logging.debug('got subtree')
+                stats.add(subtree)
+    stats.save()
 
 if __name__ == '__main__':
     main()
