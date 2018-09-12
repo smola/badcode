@@ -74,8 +74,8 @@ def extract_changes(commit: pygit2.Commit, languages=['Go']) -> typing.Generator
         logging.debug('skip merge commit: %s' % {'commit': commit.id})
         return
     parent = commit.parents[0]
-    diff = commit.tree.diff_to_tree(
-        parent.tree,
+    diff = parent.tree.diff_to_tree(
+        commit.tree,
         context_lines=0,
         interhunk_lines=1)
     diff.find_similar()
