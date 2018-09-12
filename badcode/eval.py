@@ -1,4 +1,5 @@
 
+import math
 import sys
 
 from badcode.stats import Stats
@@ -12,7 +13,7 @@ DEFAULT_MAX_SUBTREE_DEPTH = 4
 def evaluate(path):
     bblfsh_monkey_patch()
     stats = Stats.load()
-    top = [x[0] for x in list(reversed(sorted(stats.data.items(), key=lambda x: x[1]['added'] / float(x[1]['deleted']+1))))[:100]]
+    top = [x[0] for x in list(reversed(sorted(stats.data.items(), key=lambda x: math.log(x[1]['added']+1) * x[1]['added'] / float(x[1]['deleted']+1))))[:100]]
     client = bblfsh.BblfshClient("0.0.0.0:9432")
     repo = open_repository(path)
     head = get_reference(repo, 'refs/heads/master')
@@ -49,7 +50,7 @@ def evaluate(path):
                     print('BLOB %s' % change.old_blob_hash)
                     #old_blob = repo.get(change.old_blob_hash)
                     #print(old_blob.data)
-                    snippet = old_blob.data.decode().split('\n')[start-1:end+1]
+                    snippet = old_blob.data.decode().split('\n')[start-1:end]
                     snippet = '\n'.join(snippet)
                     print(snippet)
 
