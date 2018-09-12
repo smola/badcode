@@ -34,6 +34,26 @@ def extract_leaves(uast: bblfsh.Node, lines: typing.List[int]) -> typing.Tuple[t
     return leaves, parents
 
 
+# for testing, same function as above but without line filtering
+def extract_leaves_without_lines(uast: bblfsh.Node) -> typing.Tuple[typing.List[bblfsh.Node], typing.Dict[int, bblfsh.Node]]:
+    leaves = []
+    parents = {}
+    queue = [uast]
+    while queue:
+        parent_uast = queue.pop()
+        
+        # building the parents map
+        for child in parent_uast.children:
+            parents[id(child)] = parent_uast
+            
+        # traversing the uast bfs with line filtering
+        children_nodes = [child for child in parent_uast.children]
+        queue.extend(children_nodes)
+        if not parent_uast.children:
+            leaves.append(parent_uast)
+    return leaves, parents
+
+
 def extract_subtrees(uast: bblfsh.Node, max_depth: int, lines: typing.Iterable[int]) -> typing.Generator[bblfsh.Node,None,None]:
     if not isinstance(lines, set):
         lines = set(lines)
