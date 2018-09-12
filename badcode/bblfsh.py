@@ -99,14 +99,26 @@ def uast_eq(a: bblfsh.Node, b: bblfsh.Node) -> bool:
 def is_relevant_tree(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
     if uast.start_position.line in lines:
         return True
-    if uast.start_position.line > 1 and uast.end_position.line > 1:
+    if uast.end_position.line in lines:
+        return True
+    if uast.start_position.line >= 1 and uast.end_position.line >= 1:
         for line in lines:
-            if line > uast.start_position.line and line < uast.end_position.line:
+            if line >= uast.start_position.line and line <= uast.end_position.line:
                 return True
     for child in uast.children:
         if is_relevant_tree(child, lines):
             return True
     return False
+
+def filter_node(uast: bblfsh.Node) -> None:
+    while len(uast.roles) > 0:
+        uast.roles.pop()
+    uast.properties.clear()
+    for child in list(uast.children):
+        if child.internal_type == 'Position':
+            uast.children.remove(child)
+            continue
+        filter_node(child)
 
 def remove_positions(uast: bblfsh.Node) -> None:
     set_zero_position(uast)

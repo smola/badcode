@@ -8,8 +8,17 @@ class Stats:
     def __init__(self) -> None:
         self.data: typing.Dict[bblfsh.Node,int] = {}
 
-    def add(self, tree: bblfsh.Node) -> None:
-        self.data[tree] = self.data.get(tree, 0) + 1
+    def added(self, tree: bblfsh.Node) -> None:
+        ser = tree.SerializeToString()
+        if ser not in self.data:
+            self.data[ser] = {'added': 0, 'deleted': 0}
+        self.data[ser]['added'] += 1
+
+    def deleted(self, tree: bblfsh.Node) -> None:
+        ser = tree.SerializeToString()
+        if ser not in self.data:
+            self.data[ser] = {'added': 0, 'deleted': 0}
+        self.data[ser]['deleted'] += 1
 
     def save(self) -> None:
         with open('stats.db', 'wb') as f:

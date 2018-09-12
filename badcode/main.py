@@ -23,15 +23,42 @@ def main():
     for commit in walk_history(repo, head.id):
         for change in extract_changes(commit):
             logging.debug('processing change: %s' % change)
-            blob = repo.get(change.old_blob_hash)
-            response = client.parse(filename=change.old_path, contents=blob.data)
-            if response.status != 0:
-                logging.error('bblfsh parsing error: %s' % {'file': change.old_path, 'hash': blob.id, 'error': str(response.errors)})
+            old_blob = repo.get(change.old_blob_hash)
+            old_response = client.parse(filename=change.old_path, contents=old_blob.data)
+            if old_response.status != 0:
+                logging.error('bblfsh parsing error: %s' % {'file': change.old_path, 'hash': old_blob.id, 'error': str(old_response.errors)})
                 continue
             logging.debug('got bblfsh response')
-            for subtree in extract_subtrees(response.uast, max_depth=DEFAULT_MAX_SUBTREE_DEPTH, lines=change.deleted_lines):
-                logging.debug('got subtree')
-                stats.add(subtree)
+            filter_node(old_response.uast)
+            subtrees = [subtree for subtree in extract_subtrees(old_response.uast, max_depth=DEFAULT_MAX_SUBTREE_DEPTH, lines=change.deleted_lines)]
+            for subtree in subtrees:
+                #logging.debug('got subtree')
+                if not is_relevant_tree(subtree, change.deleted_lines):
+                    #logging.debug('skip non-relevant subtree')
+                    continue
+                if subtree.internal_type == 'Position':
+                    continue
+                logging.debug('got relevant subtree')
+                remove_positions(subtree)
+                stats.deleted(subtree)
+            new_blob = repo.get(change.new_blob_hash)
+            new_response = client.parse(filename=change.old_path, contents=new_blob.data)
+            if new_response.status != 0:
+                logging.error('bblfsh parsing error: %s' % {'file': change.new_path, 'hash': new_blob.id, 'error': str(new_response.errors)})
+                continue
+            logging.debug('got bblfsh response')
+            filter_node(new_response.uast)
+            subtrees = [subtree for subtree in extract_subtrees(new_response.uast, max_depth=DEFAULT_MAX_SUBTREE_DEPTH, lines=change.added_lines)]
+            for subtree in subtrees:
+                #logging.debug('got subtree')
+                if not is_relevant_tree(subtree, change.added_lines):
+                    #logging.debug('skip non-relevant subtree')
+                    continue
+                if subtree.internal_type == 'Position':
+                    continue
+                logging.debug('got relevant subtree')
+                remove_positions(subtree)
+                stats.added(subtree)
     stats.save()
 
 if __name__ == '__main__':
