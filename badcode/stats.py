@@ -25,6 +25,6 @@ class Stats:
             pickle.dump(self, f)
 
     @staticmethod
-    def load() -> 'Stats':
-        with open('stats.db', 'rb') as f:
+    def load(filename='stats.db') -> 'Stats':
+        with open(filename, 'rb') as f:
             return pickle.load(f)
