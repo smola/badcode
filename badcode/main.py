@@ -24,7 +24,10 @@ def main():
         for change in extract_changes(commit):
             logging.debug('processing change: %s' % change)
             old_blob = repo.get(change.old_blob_hash)
-            old_response = client.parse(filename=change.old_path, contents=old_blob.data)
+            try:
+                old_response = client.parse(filename=change.old_path, contents=old_blob.data)
+            except:
+                continue
             if old_response.status != 0:
                 logging.error('bblfsh parsing error: %s' % {'file': change.old_path, 'hash': old_blob.id, 'error': str(old_response.errors)})
                 continue
@@ -42,7 +45,10 @@ def main():
                 remove_positions(subtree)
                 stats.deleted(subtree)
             new_blob = repo.get(change.new_blob_hash)
-            new_response = client.parse(filename=change.old_path, contents=new_blob.data)
+            try:
+                new_response = client.parse(filename=change.old_path, contents=new_blob.data)
+            except:
+                continue
             if new_response.status != 0:
                 logging.error('bblfsh parsing error: %s' % {'file': change.new_path, 'hash': new_blob.id, 'error': str(new_response.errors)})
                 continue
