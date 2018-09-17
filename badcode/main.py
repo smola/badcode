@@ -4,6 +4,7 @@ import logging
 import sys
 
 import bblfsh
+from cachetools import LRUCache
 
 from .bblfsh import *
 from .git import *
@@ -16,30 +17,37 @@ DEFAULT_MAX_SUBTREE_DEPTH = 4
 DEFAULT_DATA_DIR = pathlib.Path('data')
 DEFAULT_REPO_DIR = DEFAULT_DATA_DIR / 'repos'
 
+CACHE = LRUCache(maxsize=200)
+
 def get_snippets(
             repo: Repository,
             client: bblfsh.BblfshClient,
             path: str,
             blob_id: pygit2.Oid,
             lines: typing.Set[int]) -> typing.Generator[bblfsh.Node,None,None]:
-        blob = repo.get(blob_id)
-        try:
-            response = client.parse(filename=path, contents=blob.data)
-        except:
-            logging.error('bblfsh parsing error raised: %s' % {
-                'file': path,
-                'hash': blob.id,
-                'error': str(response.errors)})
-            return
-        if response.status != 0:
-            logging.error('bblfsh parsing error: %s' % {
-                'file': path,
-                'hash': blob.id,
-                'error': str(response.errors)})
-            return
-        logging.debug('got bblfsh response')
-        filter_node(response.uast)
-        subtrees = [subtree for subtree in extract_subtrees(response.uast, max_depth=DEFAULT_MAX_SUBTREE_DEPTH, lines=lines)]
+        if blob_id in CACHE:
+            blob, uast = CACHE[blob_id]
+        else:
+            blob = repo.get(blob_id)
+            try:
+                response = client.parse(filename=path, contents=blob.data)
+            except:
+                logging.error('bblfsh parsing error raised: %s' % {
+                    'file': path,
+                    'hash': blob.id,
+                    'error': str(response.errors)})
+                return
+            if response.status != 0:
+                logging.error('bblfsh parsing error: %s' % {
+                    'file': path,
+                    'hash': blob.id,
+                    'error': str(response.errors)})
+                return
+            logging.debug('got bblfsh response')
+            uast = response.uast
+            filter_node(uast)
+            CACHE[blob_id] = (blob, uast)
+        subtrees = [subtree for subtree in extract_subtrees(uast, max_depth=DEFAULT_MAX_SUBTREE_DEPTH, lines=lines)]
         for subtree in subtrees:
             if not is_relevant_tree(subtree, lines):
                 return
