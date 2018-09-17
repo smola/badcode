@@ -11,9 +11,7 @@ from badcode.main import *
 import bblfsh
 
 def score(s: typing.Dict[str,int]):
-    return \
-        math.log(s['deleted']+1) * \
-        s['deleted'] / float(s['added']+1)
+    return s['deleted'] / float(s['added']+s['deleted'])
 
 def evaluate(path: str):
     bblfsh_monkey_patch()
