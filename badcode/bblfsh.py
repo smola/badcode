@@ -3,17 +3,64 @@ import typing
 
 import bblfsh
 
+class Snippet:
+    def __init__(self,
+            uast: bblfsh.Node,
+            text: str) -> None:
+        self._ser = None
+        self._uast = uast
+        self._text = text
+
+    @staticmethod
+    def from_uast_blob(
+            uast: bblfsh.Node,
+            blob: str) -> 'Snippet':
+        start, end = get_start_end_lines(uast)
+        lines = blob.split('\n')
+        lines = [l for n, l in enumerate(lines) if n + 1 >= start and n + 1 <= end]
+        text = '\n'.join(lines)
+        return Snippet(uast, text)
+
+    @property
+    def uast(self):
+        self._ensure_unser()
+        return self._uast
+    
+    @property
+    def text(self):
+        return self._text
+
+    def _ensure_ser(self):
+        if self._ser is None:
+            self._ser = self._uast.SerializeToString()
+
+    def _ensure_unser(self):
+        if self._uast is None:
+            self._uast = bblfsh.Node()
+            self._uast.ParseFromString(self._ser)
+
+    def __hash__(self) -> int:
+        return hash(self._text)
+
+    def __eq__(self, other) -> bool:
+        return self._text == other._text
+
+    def __getstate__(self):
+        self._ensure_ser()
+        state = dict(self.__dict__)
+        del state['_uast']
+        return state
 
 class Node:
-    def __init__(self, lines: typing.List[int]=None):
+    def __init__(self, lines: typing.Set[int]=set([])) -> None:
         self.lines = lines
 
 
 def extract_node(node: bblfsh.Node) -> Node:
-    return Node(lines=range(node.start_position.line, node.end_position.line + 1))
+    return Node(lines=set(range(node.start_position.line, node.end_position.line + 1)))
         
 
-def extract_leaves(uast: bblfsh.Node, lines: typing.List[int]) -> typing.Tuple[typing.List[bblfsh.Node], typing.Dict[int, bblfsh.Node]]:
+def extract_leaves(uast: bblfsh.Node, lines: typing.Set[int]) -> typing.Tuple[typing.List[bblfsh.Node], typing.Dict[int, bblfsh.Node]]:
     leaves = []
     parents = {}
     root = extract_node(uast)
@@ -27,7 +74,7 @@ def extract_leaves(uast: bblfsh.Node, lines: typing.List[int]) -> typing.Tuple[t
             
         # traversing the uast bfs with line filtering
         children_nodes = [extract_node(child) for child in parent_uast.children]
-        if set.intersection(set(parent.lines), lines):
+        if set(parent.lines) & set(lines):
             queue.extend(zip(children_nodes, parent_uast.children))
             if not parent_uast.children:
                 leaves.append(parent_uast)
@@ -56,7 +103,7 @@ def extract_subtrees(uast: bblfsh.Node, max_depth: int, lines: typing.Iterable[i
     if not isinstance(lines, set):
         lines = set(lines)
 
-    already_extracted = set()
+    already_extracted: typing.Set[int] = set([])
     leaves, parents = extract_leaves(uast, lines)
     for leaf in leaves:
         depth = 1
@@ -110,7 +157,7 @@ def is_relevant_tree(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
             return True
     return False
 
-def get_start_end_lines(uast: bblfsh.Node) -> (int, int):
+def get_start_end_lines(uast: bblfsh.Node) -> typing.Tuple[int, int]:
     start = uast.start_position.line
     end = uast.end_position.line
     for child in uast.children:

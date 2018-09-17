@@ -1,58 +1,50 @@
 
 import math
 import sys
+import typing
 
 from badcode.stats import Stats
 from badcode.git import *
 from badcode.bblfsh import *
+from badcode.main import get_snippets
 
 import bblfsh
 
 DEFAULT_MAX_SUBTREE_DEPTH = 4
 
-def evaluate(path):
+def score(s: typing.Dict[str,int]):
+    return \
+        math.log(s['deleted']+1) * \
+        s['deleted'] / float(s['added']+1)
+
+def evaluate(path: str):
     bblfsh_monkey_patch()
     stats = Stats.load()
-    top = [x[0] for x in list(reversed(sorted(stats.data.items(), key=lambda x: math.log(x[1]['added']+1) * x[1]['added'] / float(x[1]['deleted']+1))))[:100]]
+    top = [x[0] for x in reversed(sorted(stats.totals.items(), key=lambda x: score(x[1])))]
+    top = top[:100]
     client = bblfsh.BblfshClient("0.0.0.0:9432")
-    repo = open_repository(path)
-    head = get_reference(repo, 'refs/heads/master')
-    seen = set([])
-    for commit in walk_history(repo, head.id):
-        for change in extract_changes(commit):
-            old_blob = repo.get(change.old_blob_hash)
-            try:
-                old_response = client.parse(filename=change.old_path, contents=old_blob.data)
-            except:
+    repo = Repository(path)
+    head = repo.reference('refs/heads/master')
+    history = repo.walk_history(head)
+    seen: typing.Set[Snippet] = set([])
+    changes = repo.extract_changes(
+        commits=history,
+        filters=[VendorFilter(), LanguageFilter(['Go'])])
+    for change in changes:
+        snippets = get_snippets(
+            repo=repo,
+            client=client,
+            path=change.new_path,
+            blob_id=change.new_blob_hash,
+            lines=change.added_lines)
+        for snippet in snippets:
+            if snippet in seen:
                 continue
-            if old_response.status != 0:
-                logging.error('bblfsh parsing error: %s' % {'file': change.old_path, 'hash': old_blob.id, 'error': str(old_response.errors)})
+            if snippet not in top:
                 continue
-            filter_node(old_response.uast)
-            subtrees = [subtree for subtree in extract_subtrees(old_response.uast, max_depth=DEFAULT_MAX_SUBTREE_DEPTH, lines=change.deleted_lines)]
-            for subtree in subtrees:
-                #logging.debug('got subtree')
-                if not is_relevant_tree(subtree, change.deleted_lines):
-                    #logging.debug('skip non-relevant subtree')
-                    continue
-                if subtree.internal_type == 'Position':
-                    continue
-                start, end = get_start_end_lines(subtree)
-                #print('START END %d %d' % (start, end))
-                n = bblfsh.Node()
-                n.ParseFromString(subtree.SerializeToString())
-                remove_positions(n)
-                ser = n.SerializeToString()
-                if n.SerializeToString() in top and ser not in seen:
-                    seen.add(ser)
-                    print('--- FOUND SNIPPET ---')
-                    print('COMMIT %s' % commit.id)
-                    print('BLOB %s' % change.old_blob_hash)
-                    #old_blob = repo.get(change.old_blob_hash)
-                    #print(old_blob.data)
-                    snippet = old_blob.data.decode().split('\n')[start-1:end]
-                    snippet = '\n'.join(snippet)
-                    print(snippet)
+            seen.add(snippet)
+            print('--- FOUND SNIPPET ---')
+            print(snippet.text)
 
 def main():
     evaluate(sys.argv[1])
