@@ -51,70 +51,86 @@ class Snippet:
         del state['_uast']
         return state
 
-class Node:
-    def __init__(self, lines: typing.Set[int]=set([])) -> None:
-        self.lines = lines
+class Path:
+    def __init__(self,
+            path: typing.List['Path'],
+            node: bblfsh.Node,
+            lines: typing.Set[int]) -> None:
+        self.path = path
+        self.node = node
+        self.is_relevant = is_relevant_node(node, lines=lines)
+        self._is_relevant_tree = None
+        self._children = None
+        self._lines = lines
+        self._depth = None
 
+    @property
+    def children(self):
+        if self._children is None:
+            self._children = [Path(
+                path=self.path + [self],
+                node=c,
+                lines=self._lines) for c in self.node.children]
+        return self._children
 
-def extract_node(node: bblfsh.Node) -> Node:
-    return Node(lines=set(range(node.start_position.line, node.end_position.line + 1)))
-        
+    @property
+    def depth(self):
+        if self._depth is None:
+            if len(self.children) == 0:
+                self._depth = 1
+            else:
+                self._depth = max([c.depth for c in self.children])+1
+        return self._depth
 
-def extract_leaves(uast: bblfsh.Node, lines: typing.Set[int]) -> typing.Tuple[typing.List[bblfsh.Node], typing.Dict[int, bblfsh.Node]]:
-    leaves = []
-    parents = {}
-    root = extract_node(uast)
-    queue = [(root, uast)]
-    while queue:
-        parent, parent_uast = queue.pop()
-        
-        # building the parents map
-        for child in parent_uast.children:
-            parents[id(child)] = parent_uast
-            
-        # traversing the uast bfs with line filtering
-        children_nodes = [extract_node(child) for child in parent_uast.children]
-        if set(parent.lines) & set(lines):
-            queue.extend(zip(children_nodes, parent_uast.children))
-            if not parent_uast.children:
-                leaves.append(parent_uast)
-    return leaves, parents
+    @property
+    def is_relevant_tree(self):
+        if self._is_relevant_tree is None:
+            self._is_relevant_tree = self.__is_relevant_tree()
+        return self._is_relevant_tree
 
-# for testing, same function as above but without line filtering
-def extract_leaves_without_lines(uast: bblfsh.Node) -> typing.Tuple[typing.List[bblfsh.Node], typing.Dict[int, bblfsh.Node]]:
-    leaves = []
-    parents = {}
-    queue = [uast]
-    while queue:
-        parent_uast = queue.pop()
-        
-        # building the parents map
-        for child in parent_uast.children:
-            parents[id(child)] = parent_uast
-            
-        # traversing the uast bfs with line filtering
-        children_nodes = [child for child in parent_uast.children]
-        queue.extend(children_nodes)
-        if not parent_uast.children:
-            leaves.append(parent_uast)
-    return leaves, parents
+    def __is_relevant_tree(self):
+        if self.is_relevant:
+            return True
+        for c in self.children:
+            if c.is_relevant_tree:
+                return True
+        return False
+
+def extract_paths(root: bblfsh.Node, lines: typing.Set[int]) -> typing.Generator[Path,None,None]:
+    queue = [Path(path=[], node=root, lines=lines)]
+    while len(queue) > 0:
+        path = queue.pop()
+        if len(path.children) == 0:
+            yield path
+            continue
+        queue.extend(path.children)
 
 def extract_subtrees(uast: bblfsh.Node, max_depth: int, lines: typing.Iterable[int]) -> typing.Generator[bblfsh.Node,None,None]:
     if not isinstance(lines, set):
         lines = set(lines)
 
     already_extracted: typing.Set[int] = set([])
-    leaves, parents = extract_leaves(uast, lines)
-    for leaf in leaves:
-        depth = 1
-        node = leaf
-        while depth < max_depth and id(node) in parents:
-            parent = parents[id(node)]
-            node = parent
-            depth += 1
-        if id(node) not in already_extracted:
-            already_extracted.add(id(node))
-            yield node
+
+    paths = extract_paths(uast, lines=lines)
+    for path in paths:
+        is_relevant = path.is_relevant
+        if is_relevant:
+            yield path.node
+        if max_depth == 1:
+            continue
+        for depth in range(2, max_depth+1):
+            if len(path.path) < depth-1:
+                break
+            parent = path.path[-1*(depth - 1)]
+            if parent.depth > max_depth:
+                break
+            is_relevant |= parent.is_relevant
+            if is_relevant:
+                i = id(parent.node)
+                if i in already_extracted:
+                    continue
+                already_extracted.add(i)
+                yield parent.node
 
 def bblfsh_monkey_patch() -> None:
     bblfsh.Node.__hash__ = uast_hash
@@ -128,7 +144,7 @@ def uast_types(a: bblfsh.Node, depth: int) -> typing.List[str]:
     if depth == 0:
         return lst
     for child in a.children:
-        lst += uast_types(a, depth-1)
+        lst += uast_types(child, depth-1)
     return lst
 
 def uast_eq(a: bblfsh.Node, b: bblfsh.Node) -> bool:
@@ -144,6 +160,14 @@ def uast_eq(a: bblfsh.Node, b: bblfsh.Node) -> bool:
     return True        
 
 def is_relevant_tree(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
+    if is_relevant_node(uast, lines):
+        return True
+    for child in uast.children:
+        if is_relevant_tree(child, lines):
+            return True
+    return False
+
+def is_relevant_node(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
     if uast.start_position.line in lines:
         return True
     if uast.end_position.line in lines:
@@ -152,9 +176,6 @@ def is_relevant_tree(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
         for line in lines:
             if line >= uast.start_position.line and line <= uast.end_position.line:
                 return True
-    for child in uast.children:
-        if is_relevant_tree(child, lines):
-            return True
     return False
 
 def get_start_end_lines(uast: bblfsh.Node) -> typing.Tuple[int, int]:
