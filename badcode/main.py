@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_SUBTREE_DEPTH = 4
-DEFAULT_MAX_SUBTREE_SIZE = 30
+DEFAULT_MAX_SUBTREE_SIZE = 20
 DEFAULT_DATA_DIR = pathlib.Path('data')
 DEFAULT_REPO_DIR = DEFAULT_DATA_DIR / 'repos'
 
@@ -51,12 +51,13 @@ def get_snippets(
             max_depth=DEFAULT_MAX_SUBTREE_DEPTH,
             max_size=DEFAULT_MAX_SUBTREE_SIZE,
             lines=lines)]
+        n = 0
         for subtree in subtrees:
             if not is_relevant_tree(subtree, lines):
                 return
             if subtree.internal_type == 'Position':
                 return
-            logging.debug('got relevant subtree')
+            n += 1
             ser = subtree.SerializeToString()
             subtree = bblfsh.Node()
             subtree.ParseFromString(ser)
@@ -64,6 +65,7 @@ def get_snippets(
             remove_positions(snippet.uast)
 
             yield snippet
+        logging.debug('got relevant subtrees: %d', n)
 
 def analyze_repository(
         client: bblfsh.BblfshClient,
