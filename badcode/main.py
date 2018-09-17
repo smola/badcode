@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_SUBTREE_DEPTH = 4
+DEFAULT_MAX_SUBTREE_SIZE = 30
 DEFAULT_DATA_DIR = pathlib.Path('data')
 DEFAULT_REPO_DIR = DEFAULT_DATA_DIR / 'repos'
 
@@ -46,7 +47,10 @@ def get_snippets(
             uast = response.uast
             filter_node(uast)
             CACHE[blob_id] = (blob, uast)
-        subtrees = [subtree for subtree in extract_subtrees(uast, max_depth=DEFAULT_MAX_SUBTREE_DEPTH, lines=lines)]
+        subtrees = [subtree for subtree in extract_subtrees(uast,
+            max_depth=DEFAULT_MAX_SUBTREE_DEPTH,
+            max_size=DEFAULT_MAX_SUBTREE_SIZE,
+            lines=lines)]
         for subtree in subtrees:
             if not is_relevant_tree(subtree, lines):
                 return

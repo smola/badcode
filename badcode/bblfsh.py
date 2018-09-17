@@ -63,6 +63,7 @@ class Path:
         self._children = None
         self._lines = lines
         self._depth = None
+        self._size = None
 
     @property
     def children(self):
@@ -81,6 +82,15 @@ class Path:
             else:
                 self._depth = max([c.depth for c in self.children])+1
         return self._depth
+
+    @property
+    def size(self):
+        if self._size is None:
+            if len(self.children) == 0:
+                self._size = 1
+            else:
+                self._size = sum([c.size for c in self.children])+1
+        return self._size
 
     @property
     def is_relevant_tree(self):
@@ -105,7 +115,11 @@ def extract_paths(root: bblfsh.Node, lines: typing.Set[int]) -> typing.Generator
             continue
         queue.extend(path.children)
 
-def extract_subtrees(uast: bblfsh.Node, max_depth: int, lines: typing.Iterable[int]) -> typing.Generator[bblfsh.Node,None,None]:
+def extract_subtrees(
+        uast: bblfsh.Node,
+        max_depth: int,
+        max_size: int,
+        lines: typing.Iterable[int]) -> typing.Generator[bblfsh.Node,None,None]:
     if not isinstance(lines, set):
         lines = set(lines)
 
@@ -113,6 +127,8 @@ def extract_subtrees(uast: bblfsh.Node, max_depth: int, lines: typing.Iterable[i
 
     paths = extract_paths(uast, lines=lines)
     for path in paths:
+        if path.size > max_size:
+            continue
         is_relevant = path.is_relevant
         if is_relevant:
             yield path.node
@@ -123,6 +139,8 @@ def extract_subtrees(uast: bblfsh.Node, max_depth: int, lines: typing.Iterable[i
                 break
             parent = path.path[-1*(depth - 1)]
             if parent.depth > max_depth:
+                break
+            if parent.size > max_size:
                 break
             is_relevant |= parent.is_relevant
             if is_relevant:

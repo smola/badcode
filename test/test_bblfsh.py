@@ -62,16 +62,30 @@ def test_extract_subtrees_all_positions():
     paths = [p for p in extract_paths(root, lines=set([1]))]
     assert 4 == len(paths)
 
-    subtrees = [s for s in extract_subtrees(root, max_depth=1, lines=set([3]))]
+    subtrees = [s for s in extract_subtrees(root,
+        max_depth=1, max_size=100, lines=set([3]))]
     assert [child2b] == subtrees
 
-    subtrees = [s for s in extract_subtrees(root, max_depth=1, lines=set([4]))]
+    subtrees = [s for s in extract_subtrees(root,
+        max_depth=1, max_size=100, lines=set([4]))]
     assert [child3] == subtrees
 
-    subtrees = [s for s in extract_subtrees(root, max_depth=2, lines=set([3]))]
+    subtrees = [s for s in extract_subtrees(root,
+        max_depth=2, max_size=100, lines=set([3]))]
     assert 2 == len(subtrees)
     assert child2b in subtrees
     assert child2 in subtrees
+
+    subtrees = [s for s in extract_subtrees(root,
+        max_depth=100, max_size=3, lines=set([3]))]
+    assert 2 == len(subtrees)
+    assert child2b in subtrees
+    assert child2 in subtrees
+
+    subtrees = [s for s in extract_subtrees(root,
+        max_depth=100, max_size=2, lines=set([3]))]
+    assert 1 == len(subtrees)
+    assert child2b in subtrees
 
     deeper_root1 = Node()
     deeper_root2 = Node()
@@ -79,7 +93,8 @@ def test_extract_subtrees_all_positions():
     deeper_root3.children.extend([root])
     deeper_root2.children.extend([deeper_root3])
     deeper_root1.children.extend([deeper_root2])
-    subtrees = [s for s in extract_subtrees(deeper_root1, max_depth=2, lines=set([3]))]
+    subtrees = [s for s in extract_subtrees(deeper_root1,
+        max_depth=2, max_size=100, lines=set([3]))]
     assert 2 == len(subtrees)
     assert child2b in subtrees
     assert child2 in subtrees

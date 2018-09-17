@@ -6,11 +6,9 @@ import typing
 from badcode.stats import Stats
 from badcode.git import *
 from badcode.bblfsh import *
-from badcode.main import get_snippets
+from badcode.main import *
 
 import bblfsh
-
-DEFAULT_MAX_SUBTREE_DEPTH = 4
 
 def score(s: typing.Dict[str,int]):
     return \
