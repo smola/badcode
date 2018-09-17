@@ -43,13 +43,18 @@ class Snippet:
         return hash(self._text)
 
     def __eq__(self, other) -> bool:
-        return self._uast == other._uast
+        return self.uast == other.uast
 
     def __getstate__(self):
         self._ensure_ser()
         state = dict(self.__dict__)
-        del state['_uast']
+        state['_uast'] = None
         return state
+
+    def __setstate__(self, d):
+        self._uast = d.get('_uast', None)
+        self._ser = d.get('_ser', None)
+        self._text = d.get('_text', None)
 
 class Path:
     def __init__(self,
