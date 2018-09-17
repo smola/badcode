@@ -31,11 +31,10 @@ def get_snippets(
             blob = repo.get(blob_id)
             try:
                 response = client.parse(filename=path, contents=blob.data)
-            except:
-                logging.error('bblfsh parsing error raised: %s' % {
+            except Exception as exc:
+                logging.exception('bblfsh parsing error raised: %s, %s' % {
                     'file': path,
-                    'hash': blob.id,
-                    'error': str(response.errors)})
+                    'hash': blob.id}, exc)
                 return
             if response.status != 0:
                 logging.error('bblfsh parsing error: %s' % {
