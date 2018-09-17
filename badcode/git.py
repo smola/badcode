@@ -76,7 +76,13 @@ class Change:
             ','.join(map(str, self.deleted_lines)))
 
 def is_vendor(path):
-    return path.startswith('vendor')
+    if path.startswith('vendor'):
+        return True
+    if 'bindata.go' in path:
+        return True
+    if path.endswith('.pb.go'):
+        return True
+    return False
 
 def get_language(path: str) -> str:
     if path.endswith('.go'):
