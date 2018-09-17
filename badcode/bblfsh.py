@@ -43,7 +43,7 @@ class Snippet:
         return hash(self._text)
 
     def __eq__(self, other) -> bool:
-        return self._text == other._text
+        return self._uast == other._uast
 
     def __getstate__(self):
         self._ensure_ser()
