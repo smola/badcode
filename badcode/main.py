@@ -29,7 +29,7 @@ class RepositoryAnalyzer:
             stats: Stats,
             repo_name: str,
             repo: Repository) -> None:
-        self.cache = LRUCache(maxsize=200)
+        self.cache = LRUCache(maxsize=2000)
         self.repo_name = repo_name
         self.repo = repo
         self.client = client
