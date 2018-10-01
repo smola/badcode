@@ -188,6 +188,11 @@ def uast_eq(a: bblfsh.Node, b: bblfsh.Node) -> bool:
             return False
     return True        
 
+def uast_size(n: bblfsh.Node) -> int:
+    if len(n.children) == 0:
+        return 1
+    return 1 + sum([uast_size(x) for x in n.children])
+
 def is_relevant_tree(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
     if is_relevant_node(uast, lines):
         return True
