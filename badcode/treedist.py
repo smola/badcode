@@ -61,6 +61,36 @@ def node_distance(a: bblfsh.Node, b: bblfsh.Node):
 
     return cost, [_convert_op(op) for op in ops]
 
+def _all_types_and_tokens(a: bblfsh.Node) -> typing.Set[str]:
+    res = set([])
+    stack = [a]
+    while len(stack) > 0:
+        cur = stack.pop()
+        stack.extend([c for c in cur.children])
+        res.add('%s/%s' % (cur.internal_type, cur.token))
+    return res
+
+def fast_distance(a: bblfsh.Node, b: bblfsh.Node, max_dist: int) -> int:
+    stack_a = [a]
+    stack_b = [b]
+    dist = 0
+    while len(stack_a) > 0 and len(stack_b):
+        cur_a = None
+        cur_b = None
+        if len(stack_a) > 0:
+            cur_a = stack_a.pop()
+            stack_a.extend(cur_a.children)
+            cur_a = (cur_a.internal_type, cur_a.token)
+        if len(stack_b) > 0:
+            cur_b = stack_b.pop()
+            stack_b.extend(cur_b.children)
+            cur_b = (cur_b.internal_type, cur_b.token)
+        if cur_a != cur_b:
+            dist += 1
+        if dist > max_dist:
+            return dist
+    return dist
+    
 def node_merge(
         a: bblfsh.Node, b: bblfsh.Node,
         max_dist: int = 1) -> typing.Optional[bblfsh.Node]:
@@ -69,6 +99,9 @@ def node_merge(
     If distance between both trees is greater than the given max_dist,
     None is returned.
     """
+    if fast_distance(a, b, max_dist) > max_dist:
+        return None
+
     cost, ops = zss.distance(a, b,
         get_children=_get_children,
         insert_cost=lambda node: 100,

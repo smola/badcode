@@ -1,13 +1,12 @@
 
 import math
-
-import math
 import sys
 import typing
 
 from badcode.stats import *
 from badcode.bblfsh import *
 from badcode.treedist import node_distance
+from badcode.treedist import fast_distance
 from badcode.treedist import node_merge
 
 import bblfsh
@@ -24,7 +23,9 @@ def score(stats: Stats, key: Snippet) -> float:
     pct_repo = float(n_repos) / total_repos
     
     total = float(s['added']+s['deleted'])
-    return math.log(pct_repo*100) * s['deleted'] / total
+    # TODO: currently fails on merged nodes
+    #return math.log(pct_repo*100) * s['deleted'] / total
+    return math.log(total) * s['deleted'] / total
 
 def print_top(stats: Stats) -> None:
     top = list(reversed(sorted(stats.totals.keys(), key=lambda x: score(stats, x))))
@@ -49,33 +50,62 @@ def merge_same_text(stats: Stats) -> None:
                 per_text[snippet.text] = (snippet, st)
     stats.totals = dict(per_text.values())
 
-def merge_similar(stats: Stats) -> None:
-    candidates = set([])
+def _candidates_for_merge(stats: Stats) -> typing.Generator[typing.Tuple[Snippet, Snippet],None,None]:
+    candidates = []
+    sizes = {}
+    scores = {}
     for snippet, sstats in stats.totals.items():
-        if sstats['deleted'] >= sstats['added']:
-            candidates.add(id(snippet))
-    all_pairs = list(stats.totals.items())
-    merged_items = {}
-    for n, ss in enumerate(all_pairs):
-        snippet = ss[0]
-        sstats = ss[1]
-        if id(snippet) not in candidates:
+        if sstats['deleted'] < sstats['added']:
             continue
-        for osnippet, osstats in all_pairs[n+1:]:
-            if id(snippet) == id(osnippet):
+        size = uast_size(snippet.uast)
+        if size > 10:
+            continue
+        candidates.append(snippet)
+        sizes[id(snippet)] = size
+        scores[id(snippet)] = simple_score(sstats)
+    all_pairs = list(stats.totals.items())
+    proc = 0
+    total_candidates = len(candidates)
+    for n, snippet in enumerate(candidates):
+        proc += 1
+        if proc % 1000 == 0:
+            print('Candidates processed: %d/%d' % (proc, total_candidates))
+        i1 = id(snippet)
+        for osnippet in candidates[n+1:]:
+            i2 = id(osnippet)
+            if i1 == i2:
                 continue
-            if id(osnippet) not in candidates:
+            if sizes[i1] != sizes[i2]:
                 continue
-            if abs(simple_score(sstats) - simple_score(osstats)) >= 0.2:
+            if abs(scores[i1] - scores[i2]) >= 0.1:
                 continue
-            merged = node_merge(snippet.uast, osnippet.uast, max_dist=1)
-            if merged is None:
-                continue
-            merged_snippet = Snippet(uast=merged, text=snippet.text)
-            if merged_snippet not in merged_items:
-                merged_items[merged_snippet] = set([])
-            merged_items[merged_snippet].add(snippet)
-            merged_items[merged_snippet].add(osnippet)
+            yield (snippet, osnippet)
+
+def _merge_worker(x):
+    merged_node = node_merge(x[0].uast, x[1].uast, max_dist=1)
+    if merged_node is None:
+        return (None, None, None)
+    snippet, osnippet = x[0], x[1]
+    merged_snippet = Snippet(uast=merged_node, text=snippet.text)
+    return (merged_snippet, snippet, osnippet)
+
+def merge_similar(stats: Stats) -> None:
+    merged_items = {}
+    candidates = _candidates_for_merge(stats)
+    proc = 0
+    procm = 0
+    merged = map(_merge_worker, candidates)
+    for merged_snippet, snippet, osnippet in merged: 
+        proc += 1
+        if proc % 10000 == 0:
+            print('Processed: (%d, %d)' % (proc, procm))
+        if merged_snippet is None:
+            continue
+        procm += 1
+        if merged_snippet not in merged_items:
+            merged_items[merged_snippet] = set([])
+        merged_items[merged_snippet].add(snippet)
+        merged_items[merged_snippet].add(osnippet)
     for snippet, lst in merged_items.items():
         s = {'added': 0, 'deleted': 0}
         for snpt in lst:
