@@ -39,6 +39,12 @@ class Snippet:
             self._uast = bblfsh.Node()
             self._uast.ParseFromString(self._ser)
 
+    def reset_ser(self):
+        if self._uast is not None:
+            self._ser = None
+        else:
+            raise Exception('cannot reset ser without uast')
+
     def __hash__(self) -> int:
         return hash(self._text)
 
@@ -177,6 +183,8 @@ def uast_types(a: bblfsh.Node, depth: int) -> typing.List[str]:
     return lst
 
 def uast_eq(a: bblfsh.Node, b: bblfsh.Node) -> bool:
+    if b is None:
+        return False
     if a.internal_type != b.internal_type:
         return False
     if a.token != b.token:

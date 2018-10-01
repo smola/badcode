@@ -7,7 +7,8 @@ name = "pypi"
 pygit2 = '==0.27.0'
 bblfsh = "*"
 cachetools = "*"
-zss = "*"
+zss = {git = "https://github.com/timtadh/zhang-shasha.git"}
+numpy = "*"
 
 [dev-packages]
 pylint = "*"
