@@ -1,7 +1,9 @@
 
 import pathlib
 import logging
+import queue
 import sys
+import threading
 
 import bblfsh
 from cachetools import LRUCache
@@ -18,22 +20,32 @@ DEFAULT_MAX_SUBTREE_SIZE = 20
 DEFAULT_DATA_DIR = pathlib.Path('data')
 DEFAULT_REPO_DIR = DEFAULT_DATA_DIR / 'repos'
 
-CACHE = LRUCache(maxsize=200)
 
-def get_snippets(
-            repo: Repository,
+class RepositoryAnalyzer:
+    def __init__(self,
             client: bblfsh.BblfshClient,
+            stats: Stats,
+            repo_name: str,
+            repo: Repository) -> None:
+        self.cache = LRUCache(maxsize=200)
+        self.repo_name = repo_name
+        self.repo = repo
+        self.client = client
+        self.stats = stats
+        self.queue: queue.Queue = None
+
+    def get_snippets(self,
             path: str,
             blob_id: pygit2.Oid,
             lines: typing.Set[int]) -> typing.Generator[bblfsh.Node,None,None]:
-        if blob_id in CACHE:
-            blob, uast = CACHE[blob_id]
+        if blob_id in self.cache:
+            blob, uast = self.cache[blob_id]
         else:
-            blob = repo.get(blob_id)
+            blob = self.repo.get(blob_id)
             try:
-                response = client.parse(filename=path, contents=blob.data)
+                response = self.client.parse(filename=path, contents=blob.data)
             except Exception as exc:
-                logging.error('bblfsh parsing error raised: %s, %s' % {
+                logging.error('bblfsh parsing error raised: %s' % {
                     'file': path,
                     'hash': blob.id,
                     'exception': exc})
@@ -47,7 +59,7 @@ def get_snippets(
             logging.debug('got bblfsh response')
             uast = response.uast
             filter_node(uast)
-            CACHE[blob_id] = (blob, uast)
+            self.cache[blob_id] = (blob, uast)
         subtrees = [subtree for subtree in extract_subtrees(uast,
             max_depth=DEFAULT_MAX_SUBTREE_DEPTH,
             max_size=DEFAULT_MAX_SUBTREE_SIZE,
@@ -68,38 +80,58 @@ def get_snippets(
             yield snippet
         logging.debug('got relevant subtrees: %d', n)
 
-def analyze_repository(
-        client: bblfsh.BblfshClient,
-        stats: Stats,
-        repo_name: str):
-
-    repo = get_repository(repo_name)
-    logger.info('analyzing repository: %s' % repo_name)
-    head = repo.reference('refs/heads/master')
-    if head is None:
-        logger.info('no master')
-        return
-    history = repo.walk_history(head)
-    changes = repo.extract_changes(
-        commits=history,
-        filters=[VendorFilter(), LanguageFilter(['Go'])])
-    for change in changes:
+    def process_change(self,
+            change: Change) -> None:
         logging.debug('processing change: %s' % change)
-        for snippet in get_snippets(
-                repo=repo,
-                client=client,
+        for snippet in self.get_snippets(
                 path=change.old_path,
                 blob_id=change.old_blob_hash,
                 lines=change.deleted_lines):
-            stats.deleted(repo_name, snippet)
-        for snippet in get_snippets(
-                repo=repo,
-                client=client,
+            self.stats.deleted(self.repo_name, snippet)
+        for snippet in self.get_snippets(
                 path=change.new_path,
                 blob_id=change.new_blob_hash,
                 lines=change.added_lines):
-            stats.added(repo_name, snippet)
-    stats.save()
+            self.stats.added(self.repo_name, snippet)
+
+    def _process_changes_worker(self) -> None:
+        while True:
+            change: typing.Optional[Change] = self.queue.get()
+            if change is None:
+                return
+            try:
+                self.process_change(change)
+            except Exception as exc:
+                logger.errror('exception in thread: %s' % exc)
+            self.queue.task_done()
+
+    def analyze(self):
+        logger.info('analyzing repository: %s' % self.repo_name)
+        head = self.repo.reference('refs/heads/master')
+        if head is None:
+            logger.info('no master')
+            return
+        history = self.repo.walk_history(head)
+        changes = self.repo.extract_changes(
+            commits=history,
+            filters=[VendorFilter(), LanguageFilter(['Go'])])
+        self.queue = queue.Queue(maxsize=200)
+        threads = []
+        for i in range(8):
+            t = threading.Thread(target=self._process_changes_worker)
+            t.start()
+            threads.append(t)
+        for change in changes:
+            self.queue.put(change)
+        logger.debug('joining queue')
+        self.queue.join()
+        logger.debug('stopping threads')
+        for i in range(len(threads)):
+            self.queue.put(None)
+        logger.debug('joining threads')
+        for t in threads:
+            t.join()
+        self.stats.save()
 
 def get_repository(repo_name: str) -> pygit2.Repository:
     repo_dir = DEFAULT_REPO_DIR / repo_name
@@ -121,10 +153,14 @@ def main():
         repo_list = f.read().splitlines()
     DEFAULT_REPO_DIR.mkdir(parents=True, exist_ok=True)
     for repo_name in repo_list:
-        analyze_repository(
+        repo = get_repository(repo_name)
+        analyzer = RepositoryAnalyzer(
+            repo=repo,
+            repo_name=repo_name,
             client=client,
-            stats=stats,
-            repo_name=repo_name)
+            stats=stats)
+        analyzer.analyze()
+
 
 if __name__ == '__main__':
     main()
