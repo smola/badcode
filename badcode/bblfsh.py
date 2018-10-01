@@ -122,7 +122,9 @@ def extract_paths(root: bblfsh.Node, lines: typing.Set[int]) -> typing.Generator
 
 def extract_subtrees(
         uast: bblfsh.Node,
+        min_depth: int,
         max_depth: int,
+        min_size: int,
         max_size: int,
         lines: typing.Iterable[int]) -> typing.Generator[bblfsh.Node,None,None]:
     if not isinstance(lines, set):
@@ -135,7 +137,7 @@ def extract_subtrees(
         if path.size > max_size:
             continue
         is_relevant = path.is_relevant
-        if is_relevant:
+        if is_relevant and path.size >= min_size and path.depth >= min_depth:
             yield path.node
         if max_depth == 1:
             continue
@@ -147,6 +149,10 @@ def extract_subtrees(
                 break
             if parent.size > max_size:
                 break
+            if parent.size < min_size:
+                continue
+            if parent.depth < min_depth:
+                continue
             is_relevant |= parent.is_relevant
             if is_relevant:
                 i = id(parent.node)

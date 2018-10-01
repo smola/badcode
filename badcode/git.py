@@ -7,6 +7,12 @@ import pygit2
 
 logger = logging.getLogger(__name__)
 
+def git_apply_settings():
+    pygit2.settings.cache_object_limit(pygit2.GIT_OBJ_BLOB, 100 * 1024 * 1024)
+    pygit2.settings.cache_object_limit(pygit2.GIT_OBJ_COMMIT, 100 * 1024 * 1024)
+    pygit2.settings.cache_object_limit(pygit2.GIT_OBJ_TREE, 100 * 1024 * 1024)
+    pygit2.settings.cache_object_limit(pygit2.GIT_OBJ_TAG, 100 * 1024 * 1024)
+    
 
 class FileFilter:
     def match(self, path: str, content: str = None) -> bool:

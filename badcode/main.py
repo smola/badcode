@@ -15,7 +15,9 @@ from .stats import *
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+DEFAULT_MIN_SUBTREE_DEPTH = 2
 DEFAULT_MAX_SUBTREE_DEPTH = 4
+DEFAULT_MIN_SUBTREE_SIZE = 2
 DEFAULT_MAX_SUBTREE_SIZE = 20
 DEFAULT_DATA_DIR = pathlib.Path('data')
 DEFAULT_REPO_DIR = DEFAULT_DATA_DIR / 'repos'
@@ -60,7 +62,9 @@ class RepositoryAnalyzer:
             filter_node(uast)
             self.cache[blob_id] = (blob, uast)
         subtrees = [subtree for subtree in extract_subtrees(uast,
+            min_depth=DEFAULT_MIN_SUBTREE_DEPTH,
             max_depth=DEFAULT_MAX_SUBTREE_DEPTH,
+            min_size=DEFAULT_MIN_SUBTREE_SIZE,
             max_size=DEFAULT_MAX_SUBTREE_SIZE,
             lines=lines)]
         n = 0
@@ -145,6 +149,7 @@ def get_repository(repo_name: str) -> pygit2.Repository:
     return Repository(repo)
 
 def main():
+    git_apply_settings()
     bblfsh_monkey_patch()
     stats = Stats.load_or_create()
     client = bblfsh.BblfshClient("0.0.0.0:9432")
