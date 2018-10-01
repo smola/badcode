@@ -12,7 +12,7 @@ from .bblfsh import *
 from .git import *
 from .stats import *
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 DEFAULT_MIN_SUBTREE_DEPTH = 2
