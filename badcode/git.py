@@ -141,7 +141,7 @@ class Repository:
             commit.tree,
             context_lines=0,
             interhunk_lines=1)
-        diff.find_similar()
+        #PERF: diff.find_similar()
         for patch in diff:
             change = self.extract_change_from_patch(commit.id, patch, filters)
             if change is None:
