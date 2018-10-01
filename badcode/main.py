@@ -56,7 +56,6 @@ class RepositoryAnalyzer:
                     'hash': blob.id,
                     'error': str(response.errors)})
                 return
-            logging.debug('got bblfsh response')
             uast = response.uast
             filter_node(uast)
             self.cache[blob_id] = (blob, uast)
