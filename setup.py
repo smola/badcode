@@ -1,7 +1,8 @@
-from setuptools import setup
+import setuptools
 
-setup(
+setuptools.setup(
     name='badcode',
+    packages=setuptools.find_packages(exclude=['test']),
     entry_points={
         'console_scripts': [
             'badcode = badcode.main:main',
