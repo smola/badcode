@@ -1,9 +1,7 @@
 
 import pathlib
 import logging
-import queue
 import sys
-import threading
 
 import bblfsh
 from cachetools import LRUCache
@@ -21,6 +19,7 @@ DEFAULT_MIN_SUBTREE_SIZE = 2
 DEFAULT_MAX_SUBTREE_SIZE = 20
 DEFAULT_DATA_DIR = pathlib.Path('data')
 DEFAULT_REPO_DIR = DEFAULT_DATA_DIR / 'repos'
+DEFAULT_STATS_DIR = DEFAULT_DATA_DIR / 'stats'
 
 
 class RepositoryAnalyzer:
@@ -34,7 +33,6 @@ class RepositoryAnalyzer:
         self.repo = repo
         self.client = client
         self.stats = stats
-        self.queue: queue.Queue = None
 
     def get_snippets(self,
             path: str,
@@ -97,17 +95,6 @@ class RepositoryAnalyzer:
                 lines=change.added_lines):
             self.stats.added(self.repo_name, snippet)
 
-    def _process_changes_worker(self) -> None:
-        while True:
-            change: typing.Optional[Change] = self.queue.get()
-            if change is None:
-                return
-            try:
-                self.process_change(change)
-            except Exception as exc:
-                logger.errror('exception in thread: %s' % exc)
-            self.queue.task_done()
-
     def analyze(self):
         logger.info('analyzing repository: %s' % self.repo_name)
         head = self.repo.reference('refs/heads/master')
@@ -118,23 +105,11 @@ class RepositoryAnalyzer:
         changes = self.repo.extract_changes(
             commits=history,
             filters=[VendorFilter(), LanguageFilter(['Go'])])
-        self.queue = queue.Queue(maxsize=200)
-        threads = []
-        for i in range(8):
-            t = threading.Thread(target=self._process_changes_worker)
-            t.start()
-            threads.append(t)
         for change in changes:
-            self.queue.put(change)
-        logger.debug('joining queue')
-        self.queue.join()
-        logger.debug('stopping threads')
-        for i in range(len(threads)):
-            self.queue.put(None)
-        logger.debug('joining threads')
-        for t in threads:
-            t.join()
+            self.process_change(change)
+        logger.info('saving stats: %s' % self.repo_name)
         self.stats.save()
+        logger.info('saved stats: %s' % self.repo_name)
 
 def get_repository(repo_name: str) -> pygit2.Repository:
     repo_dir = DEFAULT_REPO_DIR / repo_name
