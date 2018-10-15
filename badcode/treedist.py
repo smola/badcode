@@ -5,6 +5,9 @@ import typing
 import bblfsh
 import zss
 
+from .bblfsh import uast_eq_node
+from .bblfsh import uast_iter
+
 def _get_children(a: bblfsh.Node) -> typing.List[bblfsh.Node]:
     return [c for c in a.children]
 
@@ -147,21 +150,6 @@ def node_merge(
 
     return node
 
-def _tree_iter(t: bblfsh.Node) -> typing.Generator[bblfsh.Node, None, None]:
-    stack = []
-    stack.append(t)
-    while len(stack) > 0:
-        n = stack.pop()
-        stack.extend(n.children)
-        yield n
-
-def _eq_nodes(a: bblfsh.Node, b: bblfsh.Node) -> bool:
-    if a.internal_type != b.internal_type:
-        return False
-    if a.token != b.token:
-        return False
-    return True
-
 def single_node_merge(a: bblfsh.Node, b: bblfsh.Node) -> typing.Optional[bblfsh.Node]:
     """
     Return a node that matches both inputs by using a single wildcard.
@@ -172,10 +160,10 @@ def single_node_merge(a: bblfsh.Node, b: bblfsh.Node) -> typing.Optional[bblfsh.
     diff_token = False
     diff_internal_type = False
     n = 0
-    for an, bn in itertools.zip_longest(_tree_iter(a), _tree_iter(b)):
+    for an, bn in itertools.zip_longest(uast_iter(a), uast_iter(b)):
         if an is None or bn is None:
             return None
-        if _eq_nodes(an, bn):
+        if uast_eq_node(an, bn):
             n += 1
             continue
         if diff_pos is not None:
@@ -193,7 +181,7 @@ def single_node_merge(a: bblfsh.Node, b: bblfsh.Node) -> typing.Optional[bblfsh.
     node.ParseFromString(ser)
 
     n = 0
-    for an in _tree_iter(node):
+    for an in uast_iter(node):
         if n != diff_pos:
             n += 1
             continue
@@ -237,7 +225,7 @@ def single_node_merge_precalc(
     node.ParseFromString(ser)
 
     n = 0
-    for nn, an, bn in zip(_tree_iter(node), _tree_iter(a), _tree_iter(b)):
+    for nn, an, bn in zip(uast_iter(node), uast_iter(a), uast_iter(b)):
         if n != diff_pos:
             n += 1
             continue
@@ -255,7 +243,7 @@ class TreeToSeq:
     
     def tree_to_seq(self, a: bblfsh.Node) -> typing.List[int]:
         seq: typing.List[int] = []
-        for node in _tree_iter(a):
+        for node in uast_iter(a):
             word = '%s/%s' % (node.internal_type, node.token)
             seq_id = self._seq_id(word)
             seq.append(seq_id)

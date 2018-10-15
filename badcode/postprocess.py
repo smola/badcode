@@ -39,8 +39,10 @@ def print_top(stats: Stats) -> None:
         print('STATS: %s' % stats.totals[s])
         print('REPOS: %d' % len([1 for d in stats.per_repo.values() if s in d]))
         print('SCORE: %f' % score(stats, s))
+        print('TEXT:')
         print(s.text)
-        #print(s.uast)
+        print('UAST:')
+        print(s.uast)
         print()
 
 def merge_same_text(stats: Stats) -> None:
@@ -58,29 +60,25 @@ def merge_similar(stats: Stats) -> None:
     snippets = []
     tts = TreeToSeq()
     for snippet, sstats in stats.totals.items():
-        single_node = len(snippet.uast.children) == 0
-        tree_seq = tts.tree_to_seq(snippet.uast)
-        snippets.append((snippet, sstats, tree_seq, single_node))
+        if sstats['added'] >= sstats['deleted']:
+            continue
+        uast = snippet.uast
+        if len(uast.children) == 0:
+            continue
+        tree_seq = tts.tree_to_seq(uast)
+        snippets.append((snippet, sstats, tree_seq, uast))
     tts = None
     total = len(snippets)
     proc = 0
-    for i, (snippet, sstats, tree_seq, single_node) in enumerate(snippets):
+    for i, (snippet, sstats, tree_seq, uast) in enumerate(snippets):
         if proc % 1000 == 0:
             print('Processed: %d/%d)' % (proc, total))
         proc += 1
-        if single_node:
-            continue
-        if sstats['added'] >= sstats['deleted']:
-            continue
-        for osnippet, osstats, otree_seq, osingle_node in snippets[i+1:]:
-            if osingle_node:
-                continue
-            if osstats['added'] >= osstats['deleted']:
-                continue
-            merged_uast = single_node_merge_precalc(snippet.uast, osnippet.uast, tree_seq, otree_seq)
+        for osnippet, osstats, otree_seq, ouast in snippets[i+1:]:
+            merged_uast = single_node_merge_precalc(uast, ouast, tree_seq, otree_seq)
             if merged_uast is None:
                 continue
-            merged_snippet = Snippet(uast=merged_uast, text=snippet.text)
+            merged_snippet = Snippet(uast=merged_uast, text='MERGED: ' + snippet.text)
             lst = merged_snippets.get(merged_snippet, set([]))
             lst.add(snippet)
             lst.add(osnippet)

@@ -1,4 +1,6 @@
 
+import collections
+import itertools
 import typing
 
 import bblfsh
@@ -46,10 +48,10 @@ class Snippet:
             raise Exception('cannot reset ser without uast')
 
     def __hash__(self) -> int:
-        return hash(self._text)
+        return uast_hash(self.uast)
 
     def __eq__(self, other) -> bool:
-        return self.uast == other.uast
+        return uast_eq(self.uast, other.uast)
 
     def __getstate__(self):
         self._ensure_ser()
@@ -171,30 +173,41 @@ def bblfsh_monkey_patch() -> None:
     bblfsh.Node.__hash__ = uast_hash
     bblfsh.Node.__eq__ = uast_eq
 
+def uast_iter(t: bblfsh.Node) -> typing.Generator[bblfsh.Node, None, None]:
+    stack = collections.deque()
+    stack.append(t)
+    while stack:
+        n = stack.pop()
+        stack.extend(n.children)
+        yield n
+
 def uast_hash(a: bblfsh.Node) -> int:
-    return hash(tuple(uast_types(a, 2)))
+    return hash(tuple(uast_tokens(a, 20)))
     
-def uast_types(a: bblfsh.Node, depth: int) -> typing.List[str]:
-    lst = [a.internal_type]
-    if depth == 0:
-        return lst
-    for child in a.children:
-        lst += uast_types(child, depth-1)
-    return lst
+def uast_types(a: bblfsh.Node, max: int) -> typing.List[str]:
+    it = itertools.islice(uast_iter(a), max)
+    return [n.internal_type for n in it]
+
+def uast_tokens(a: bblfsh.Node, max: int) -> typing.List[str]:
+    it = itertools.islice(uast_iter(a), max)
+    return [n.token for n in it]
+
+def uast_eq_node(a: bblfsh.Node, b: bblfsh.Node) -> bool:
+    if a.token != b.token:
+        return False
+    if a.internal_type != b.internal_type:
+        return False
+    return True
 
 def uast_eq(a: bblfsh.Node, b: bblfsh.Node) -> bool:
     if b is None:
         return False
-    if a.internal_type != b.internal_type:
-        return False
-    if a.token != b.token:
-        return False
-    if len(a.children) != len(b.children):
-        return False
-    for ac, bc in zip(a.children, b.children):
-        if not uast_eq(ac, bc):
+    for an, bn in itertools.zip_longest(uast_iter(a), uast_iter(b)):
+        if an is None or bn is None:
             return False
-    return True        
+        if not uast_eq_node(an, bn):
+            return False
+    return True
 
 def uast_size(n: bblfsh.Node) -> int:
     if len(n.children) == 0:
