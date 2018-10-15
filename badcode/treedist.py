@@ -1,4 +1,5 @@
 
+import itertools
 import typing
 
 import bblfsh
@@ -143,5 +144,64 @@ def node_merge(
             continue
         stack.extend(reversed([c for c in cur.children]))
         visited.add(id(cur))
+
+    return node
+
+def _tree_iter(t: bblfsh.Node) -> typing.Generator[bblfsh.Node, None, None]:
+    stack = []
+    stack.append(t)
+    while len(stack) > 0:
+        n = stack.pop()
+        if len(n.children) > 0:
+            stack.extend(n.children)
+        yield n
+
+def _eq_nodes(a: bblfsh.Node, b: bblfsh.Node) -> bool:
+    if a.internal_type != b.internal_type:
+        return False
+    if a.token != b.token:
+        return False
+    return True
+
+def single_node_merge(a: bblfsh.Node, b: bblfsh.Node) -> typing.Optional[bblfsh.Node]:
+    """
+    Return a node that matches both inputs by using a single wildcard.
+    If there is more than one different node, None is returned.
+    """
+
+    diff_pos = None
+    diff_token = False
+    diff_internal_type = False
+    n = 0
+    for an, bn in itertools.zip_longest(_tree_iter(a), _tree_iter(b)):
+        if an is None or bn is None:
+            return None
+        if _eq_nodes(an, bn):
+            n += 1
+            continue
+        if diff_pos is not None:
+            return None
+        diff_pos = n
+        diff_internal_type = an.internal_type != bn.internal_type
+        diff_token = an.token != bn.token
+        n += 1
+
+    if diff_pos is None:
+        return None
+
+    ser = a.SerializeToString()
+    node = bblfsh.Node()
+    node.ParseFromString(ser)
+
+    n = 0
+    for an in _tree_iter(node):
+        if n != diff_pos:
+            n += 1
+            continue
+        if diff_internal_type:
+            an.internal_type = 'MATCH_ANY'
+        if diff_token:
+            an.token = 'MATCH_ANY'
+        break
 
     return node

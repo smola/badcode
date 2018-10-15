@@ -4,6 +4,7 @@ import unittest
 from bblfsh import Node
 from badcode.treedist import node_distance
 from badcode.treedist import node_merge
+from badcode.treedist import single_node_merge
 
 import zss
 
@@ -149,3 +150,75 @@ def test_node_merge():
     c.children.extend([a1, a2])
 
     assert c == node_merge(a, b, max_dist=2)
+
+def test_single_node_merge():
+    a = Node()
+    a.internal_type = 'A'
+    a.token = 'a'
+
+    b = Node()
+    b.internal_type = 'B'
+    b.token = 'b'
+    
+    c = Node()
+    c.internal_type = 'MATCH_ANY'
+    c.token = 'MATCH_ANY'
+
+    assert single_node_merge(a, a) is None
+    assert c == single_node_merge(a, b)
+
+    b = Node()
+    b.internal_type = 'A'
+    b.token = 'b'
+    
+    c = Node()
+    c.internal_type = 'A'
+    c.token = 'MATCH_ANY'
+    assert c == single_node_merge(a, b)
+
+    a = Node()
+    a.internal_type = 'A'
+    a.token = 'a'
+    a1 = Node()
+    a1.internal_type = 'A1'
+    a1.token = 'a1'
+    a2 = Node()
+    a2.internal_type = 'A2'
+    a2.token = 'a2'
+    a21 = Node()
+    a21.internal_type = 'A21'
+    a21.token = 'a21'
+    a2.children.extend([a21])
+    a.children.extend([a1, a2])
+
+    b = Node()
+    b.internal_type = 'A'
+    b.token = 'a'
+    a1 = Node()
+    a1.internal_type = 'A1'
+    a1.token = 'a1'
+    a2 = Node()
+    a2.internal_type = 'A2'
+    a2.token = 'a2'
+    a21 = Node()
+    a21.internal_type = 'B21'
+    a21.token = 'b21'
+    a2.children.extend([a21])
+    b.children.extend([a1, a2])
+
+    c = Node()
+    c.internal_type = 'A'
+    c.token = 'a'
+    a1 = Node()
+    a1.internal_type = 'A1'
+    a1.token = 'a1'
+    a2 = Node()
+    a2.internal_type = 'A2'
+    a2.token = 'a2'
+    a21 = Node()
+    a21.internal_type = 'MATCH_ANY'
+    a21.token = 'MATCH_ANY'
+    a2.children.extend([a21])
+    c.children.extend([a1, a2])
+
+    assert c == single_node_merge(a, b)
