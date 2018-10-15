@@ -1,6 +1,7 @@
 
-import pathlib
 import logging
+import multiprocessing
+import pathlib
 import sys
 
 import bblfsh
@@ -20,6 +21,7 @@ DEFAULT_MAX_SUBTREE_SIZE = 20
 DEFAULT_DATA_DIR = pathlib.Path('data')
 DEFAULT_REPO_DIR = DEFAULT_DATA_DIR / 'repos'
 DEFAULT_STATS_DIR = DEFAULT_DATA_DIR / 'stats'
+DEFAULT_WORKERS = multiprocessing.cpu_count() * 2
 
 
 class RepositoryAnalyzer:
@@ -107,9 +109,6 @@ class RepositoryAnalyzer:
             filters=[VendorFilter(), LanguageFilter(['Go'])])
         for change in changes:
             self.process_change(change)
-        logger.info('saving stats: %s' % self.repo_name)
-        self.stats.save()
-        logger.info('saved stats: %s' % self.repo_name)
 
 def get_repository(repo_name: str) -> pygit2.Repository:
     repo_dir = DEFAULT_REPO_DIR / repo_name
@@ -123,23 +122,35 @@ def get_repository(repo_name: str) -> pygit2.Repository:
         bare=True)
     return Repository(repo)
 
+def main_per_repository(repo_name: str) -> None:
+    STATS_PATH = DEFAULT_STATS_DIR / repo_name / 'stats.db'
+    STATS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if STATS_PATH.exists():
+        logger.info('Stats already exist for %s' % repo_name)
+        return
+
+    stats = Stats()
+    client = bblfsh.BblfshClient("0.0.0.0:9432")
+    repo = get_repository(repo_name)
+    analyzer = RepositoryAnalyzer(
+        repo=repo,
+        repo_name=repo_name,
+        client=client,
+        stats=stats)
+    analyzer.analyze()
+    logger.info('saving stats: %s' % STATS_PATH)
+    analyzer.stats.save(filename=STATS_PATH)
+    logger.info('saved stats: %s' % STATS_PATH)
+
 def main():
     git_apply_settings()
     bblfsh_monkey_patch()
-    stats = Stats.load_or_create()
-    client = bblfsh.BblfshClient("0.0.0.0:9432")
+    DEFAULT_REPO_DIR.mkdir(parents=True, exist_ok=True)
+    DEFAULT_STATS_DIR.mkdir(parents=True, exist_ok=True)
     with open(sys.argv[1], 'r') as f:
         repo_list = f.read().splitlines()
-    DEFAULT_REPO_DIR.mkdir(parents=True, exist_ok=True)
-    for repo_name in repo_list:
-        repo = get_repository(repo_name)
-        analyzer = RepositoryAnalyzer(
-            repo=repo,
-            repo_name=repo_name,
-            client=client,
-            stats=stats)
-        analyzer.analyze()
-
+    with multiprocessing.Pool(processes=DEFAULT_WORKERS) as pool:
+        pool.map(main_per_repository, repo_list)
 
 if __name__ == '__main__':
     main()
