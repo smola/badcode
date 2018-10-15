@@ -7,14 +7,14 @@ WORKDIR /code
 
 RUN \
 	apt-get update && \
-	apt-get install -y python3-dev python3-pip libxml2-dev libgit2-dev libssl-dev git build-essential cmake wget && \
+	apt-get install -y python3-dev python3-pip libxml2-dev libssl-dev git build-essential cmake wget && \
 	rm -rf /var/lib/apt/lists
 
 RUN \
 	wget https://github.com/libgit2/libgit2/archive/v0.27.0.tar.gz && \
 	tar xzf v0.27.0.tar.gz && \
 	cd libgit2-0.27.0/ && \
-	cmake . && \
+	cmake . -DCMAKE_INSTALL_PREFIX=/usr && \
 	make && \
 	make install && \
 	cd /code && \
