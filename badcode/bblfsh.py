@@ -178,8 +178,8 @@ def uast_iter(t: bblfsh.Node) -> typing.Generator[bblfsh.Node, None, None]:
     stack.append(t)
     while stack:
         n = stack.pop()
-        stack.extend(n.children)
         yield n
+        stack.extend(n.children)
 
 def uast_hash(a: bblfsh.Node) -> int:
     return hash(tuple(uast_tokens(a, 20)))
@@ -199,15 +199,25 @@ def uast_eq_node(a: bblfsh.Node, b: bblfsh.Node) -> bool:
         return False
     return True
 
-def uast_eq(a: bblfsh.Node, b: bblfsh.Node) -> bool:
+def uast_eq_node_wildcards(a: bblfsh.Node, b: bblfsh.Node) -> bool:
+    if a.token != b.token and a.token != 'MATCH_ANY' and b.token != 'MATCH_ANY':
+        return False
+    if a.internal_type != b.internal_type and a.internal_type != 'MATCH_ANY' and b.internal_type != 'MATCH_ANY':
+        return False
+    return True
+
+def uast_eq(a: bblfsh.Node, b: bblfsh.Node, eqf=uast_eq_node) -> bool:
     if b is None:
         return False
     for an, bn in itertools.zip_longest(uast_iter(a), uast_iter(b)):
         if an is None or bn is None:
             return False
-        if not uast_eq_node(an, bn):
+        if not eqf(an, bn):
             return False
     return True
+
+def uast_eq_wildcards(a: bblfsh.Node, b: bblfsh.Node) -> bool:
+    return uast_eq(a, b, eqf=uast_eq_node_wildcards)
 
 def uast_size(n: bblfsh.Node) -> int:
     if len(n.children) == 0:

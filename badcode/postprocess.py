@@ -57,16 +57,19 @@ def merge_same_text(stats: Stats) -> None:
 
 def merge_similar(stats: Stats) -> None:
     merged_snippets = {}
+    merged_sizes = {}
     snippets = []
+    positive_snippets = []
     tts = TreeToSeq()
     for snippet, sstats in stats.totals.items():
-        if sstats['added'] >= sstats['deleted']:
-            continue
         uast = snippet.uast
         if len(uast.children) == 0:
             continue
         tree_seq = tts.tree_to_seq(uast)
-        snippets.append((snippet, sstats, tree_seq, uast))
+        if sstats['added'] >= sstats['deleted']:
+            positive_snippets.append((snippet, sstats, tree_seq, uast))
+        else:
+            snippets.append((snippet, sstats, tree_seq, uast))
     tts = None
     total = len(snippets)
     proc = 0
@@ -83,6 +86,7 @@ def merge_similar(stats: Stats) -> None:
             lst.add(snippet)
             lst.add(osnippet)
             merged_snippets[merged_snippet] = lst
+            merged_sizes[merged_snippet] = len(tree_seq)
 
     for snippet, lst in merged_snippets.items():
         s = {'added': 0, 'deleted': 0}
@@ -90,7 +94,18 @@ def merge_similar(stats: Stats) -> None:
             st = stats.totals[snpt]
             s['added'] += st['added']
             s['deleted'] += st['deleted']
-        s['merged'] = len(lst)
+        s['merged_negative'] = len(lst)
+        s['merged_positive'] = 0
+        uast_size = merged_sizes[snippet]
+        for snpt in positive_snippets:
+            if uast_size != len(snpt[2]):
+                continue
+            if uast_eq_wildcards(snippet.uast, snpt[3]):
+                st = stats.totals[snpt[0]]
+                s['added'] += st['added']
+                s['deleted'] += st['deleted']
+                s['merged_positive'] += 1
+        s['merged'] = s['merged_negative'] + s['merged_positive']
         stats.totals[snippet] = s
 
 def postprocess(path: str):
