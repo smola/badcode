@@ -21,7 +21,9 @@ DEFAULT_MAX_SUBTREE_SIZE = 20
 DEFAULT_DATA_DIR = pathlib.Path('data')
 DEFAULT_REPO_DIR = DEFAULT_DATA_DIR / 'repos'
 DEFAULT_STATS_DIR = DEFAULT_DATA_DIR / 'stats'
-DEFAULT_WORKERS = multiprocessing.cpu_count() * 2
+
+#XXX: To avoid bblfsh downscaling, we set workers to CPUs+1
+DEFAULT_WORKERS = multiprocessing.cpu_count() + 1
 
 
 class RepositoryAnalyzer:
@@ -143,14 +145,27 @@ def main_per_repository(repo_name: str) -> None:
     logger.info('saved stats: %s' % STATS_PATH)
 
 def main():
+    repo_list_path = sys.argv[1]
     git_apply_settings()
     bblfsh_monkey_patch()
     DEFAULT_REPO_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_STATS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(sys.argv[1], 'r') as f:
+    logger.info('Reading repository list from %s' % repo_list_path)
+    with open(repo_list_path, 'r') as f:
         repo_list = f.read().splitlines()
+    logger.info('Start repository analysis with %d workers' % DEFAULT_WORKERS)
     with multiprocessing.Pool(processes=DEFAULT_WORKERS) as pool:
         pool.map(main_per_repository, repo_list)
+    logger.info('Finished repository analysis')
+
+    logger.info('Merge stats')
+    global_stats = Stats()
+    for repo_name in repo_list:
+        local_stats = Stats.load(DEFAULT_STATS_DIR / repo_name / 'stats.db')
+        global_stats += local_stats
+    logger.info('Saving merged stats')
+    global_stats.save(DEFAULT_DATA_DIR / 'stats.db')
+    logger.info('Saved merged stats')
 
 if __name__ == '__main__':
     main()

@@ -1,4 +1,5 @@
 
+import collections
 import os.path
 import pickle
 import typing
@@ -11,8 +12,8 @@ DEFAULT_STATS_DB = 'stats.db'
 
 class Stats:
     def __init__(self) -> None:
-        self.totals: typing.Dict[Snippet,typing.Dict[str,int]] = {}
-        self.per_repo: typing.Dict[str,typing.Dict[Snippet,typing.Dict[str,int]]] = {}
+        self.totals = {}
+        self.per_repo = {}
 
     def added(self, repo: str, element: Snippet) -> None:
         self._add(repo, element, 'added')
@@ -22,13 +23,35 @@ class Stats:
 
     def _add(self, repo: str, element: Snippet, key: str) -> None:
         if element not in self.totals:
-            self.totals[element] = {'added': 0, 'deleted': 0}
+            self.totals[element] = collections.defaultdict(int)
         self.totals[element][key] += 1
         if repo not in self.per_repo:
             self.per_repo[repo] = {}
         if element not in self.per_repo[repo]:
             self.per_repo[repo][element] = {'added': 0, 'deleted': 0}
         self.per_repo[repo][element][key] += 1
+
+    def __iadd__(self, other: 'Stats') -> 'Stats':
+        self._merge_dict_of_dicts_of_int_values(
+            self.totals,
+            other.totals)
+        for repo, val in other.per_repo.items():
+            self._merge_dict_of_dicts_of_int_values(
+                self.per_repo.get(repo, {}), val)
+        return self
+
+    def _merge_dict_of_dicts_of_int_values(self, a, b):
+        for key, val in b.items():
+            prev = a.get(key, collections.defaultdict(int))
+            a[key] = self._merge_dict_of_int_values(prev, val)
+
+    def _merge_dict_of_int_values(self, a, b):
+        c = collections.defaultdict(int)
+        for k, v in a.items():
+            c[k] += v
+        for k, v in b.items():
+            c[k] += v
+        return c
 
     def save(self, filename=DEFAULT_STATS_DB) -> None:
         with open(filename, 'wb') as f:
