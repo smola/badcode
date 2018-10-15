@@ -152,8 +152,7 @@ def _tree_iter(t: bblfsh.Node) -> typing.Generator[bblfsh.Node, None, None]:
     stack.append(t)
     while len(stack) > 0:
         n = stack.pop()
-        if len(n.children) > 0:
-            stack.extend(n.children)
+        stack.extend(n.children)
         yield n
 
 def _eq_nodes(a: bblfsh.Node, b: bblfsh.Node) -> bool:
@@ -205,3 +204,66 @@ def single_node_merge(a: bblfsh.Node, b: bblfsh.Node) -> typing.Optional[bblfsh.
         break
 
     return node
+
+def single_node_merge_precalc(
+        a: bblfsh.Node, b: bblfsh.Node,
+        a_tree_seq: typing.List[int],
+        b_tree_seq: typing.List[int],
+        ) -> typing.Optional[bblfsh.Node]:
+    """
+    Return a node that matches both inputs by using a single wildcard.
+    If there is more than one different node, None is returned.
+    """
+
+    if len(a_tree_seq) != len(b_tree_seq):
+        return None
+
+    diff_pos = None
+    n = 0
+    for an, bn in zip(a_tree_seq, b_tree_seq):
+        if an == bn:
+            n += 1
+            continue
+        if diff_pos is not None:
+            return None
+        diff_pos = n
+        n += 1
+
+    if diff_pos is None:
+        return None
+
+    ser = a.SerializeToString()
+    node = bblfsh.Node()
+    node.ParseFromString(ser)
+
+    n = 0
+    for nn, an, bn in zip(_tree_iter(node), _tree_iter(a), _tree_iter(b)):
+        if n != diff_pos:
+            n += 1
+            continue
+        if an.internal_type != bn.internal_type:
+            nn.internal_type = 'MATCH_ANY'
+        if an.token != bn.token:
+            nn.token = 'MATCH_ANY'
+        break
+
+    return node
+
+class TreeToSeq:
+    def __init__(self):
+        self.vocab = {}
+    
+    def tree_to_seq(self, a: bblfsh.Node) -> typing.List[int]:
+        seq: typing.List[int] = []
+        for node in _tree_iter(a):
+            word = '%s/%s' % (node.internal_type, node.token)
+            seq_id = self._seq_id(word)
+            seq.append(seq_id)
+        return seq
+
+    def _seq_id(self, word: str) -> int:
+        seq_id = self.vocab.get(word, None)
+        if seq_id is None:
+            seq_id = len(self.vocab) + 1
+            self.vocab[word] = seq_id
+        return seq_id

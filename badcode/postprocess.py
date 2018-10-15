@@ -8,6 +8,9 @@ from badcode.bblfsh import *
 from badcode.treedist import node_distance
 from badcode.treedist import fast_distance
 from badcode.treedist import node_merge
+from badcode.treedist import single_node_merge
+from badcode.treedist import single_node_merge_precalc
+from badcode.treedist import TreeToSeq
 
 import bblfsh
 
@@ -50,63 +53,40 @@ def merge_same_text(stats: Stats) -> None:
                 per_text[snippet.text] = (snippet, st)
     stats.totals = dict(per_text.values())
 
-def _candidates_for_merge(stats: Stats) -> typing.Generator[typing.Tuple[Snippet, Snippet],None,None]:
-    candidates = []
-    sizes = {}
-    scores = {}
-    for snippet, sstats in stats.totals.items():
-        if sstats['deleted'] < sstats['added']:
-            continue
-        size = uast_size(snippet.uast)
-        if size > 10:
-            continue
-        candidates.append(snippet)
-        sizes[id(snippet)] = size
-        scores[id(snippet)] = simple_score(sstats)
-    all_pairs = list(stats.totals.items())
-    proc = 0
-    total_candidates = len(candidates)
-    for n, snippet in enumerate(candidates):
-        proc += 1
-        if proc % 1000 == 0:
-            print('Candidates processed: %d/%d' % (proc, total_candidates))
-        i1 = id(snippet)
-        for osnippet in candidates[n+1:]:
-            i2 = id(osnippet)
-            if i1 == i2:
-                continue
-            if sizes[i1] != sizes[i2]:
-                continue
-            if abs(scores[i1] - scores[i2]) >= 0.1:
-                continue
-            yield (snippet, osnippet)
-
-def _merge_worker(x):
-    merged_node = node_merge(x[0].uast, x[1].uast, max_dist=1)
-    if merged_node is None:
-        return (None, None, None)
-    snippet, osnippet = x[0], x[1]
-    merged_snippet = Snippet(uast=merged_node, text=snippet.text)
-    return (merged_snippet, snippet, osnippet)
-
 def merge_similar(stats: Stats) -> None:
-    merged_items = {}
-    candidates = _candidates_for_merge(stats)
+    merged_snippets = {}
+    snippets = []
+    tts = TreeToSeq()
+    for snippet, sstats in stats.totals.items():
+        single_node = len(snippet.uast.children) == 0
+        tree_seq = tts.tree_to_seq(snippet.uast)
+        snippets.append((snippet, sstats, tree_seq, single_node))
+    tts = None
+    total = len(snippets)
     proc = 0
-    procm = 0
-    merged = map(_merge_worker, candidates)
-    for merged_snippet, snippet, osnippet in merged: 
+    for i, (snippet, sstats, tree_seq, single_node) in enumerate(snippets):
+        if proc % 1000 == 0:
+            print('Processed: %d/%d)' % (proc, total))
         proc += 1
-        if proc % 10000 == 0:
-            print('Processed: (%d, %d)' % (proc, procm))
-        if merged_snippet is None:
+        if single_node:
             continue
-        procm += 1
-        if merged_snippet not in merged_items:
-            merged_items[merged_snippet] = set([])
-        merged_items[merged_snippet].add(snippet)
-        merged_items[merged_snippet].add(osnippet)
-    for snippet, lst in merged_items.items():
+        if sstats['added'] >= sstats['deleted']:
+            continue
+        for osnippet, osstats, otree_seq, osingle_node in snippets[i+1:]:
+            if osingle_node:
+                continue
+            if osstats['added'] >= osstats['deleted']:
+                continue
+            merged_uast = single_node_merge_precalc(snippet.uast, osnippet.uast, tree_seq, otree_seq)
+            if merged_uast is None:
+                continue
+            merged_snippet = Snippet(uast=merged_uast, text=snippet.text)
+            lst = merged_snippets.get(merged_snippet, set([]))
+            lst.add(snippet)
+            lst.add(osnippet)
+            merged_snippets[merged_snippet] = lst
+
+    for snippet, lst in merged_snippets.items():
         s = {'added': 0, 'deleted': 0}
         for snpt in lst:
             st = stats.totals[snpt]
