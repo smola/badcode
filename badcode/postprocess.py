@@ -1,6 +1,7 @@
 
 import collections
 import math
+import os.path
 import sys
 import typing
 
@@ -19,16 +20,25 @@ import bblfsh
 
 def score1(stats: Stats, key: Snippet) -> float:
     s = stats.totals[key]
-    total = float(s['added']+s['deleted'])
-    return s['deleted'] / total
+    if s['added'] > s['deleted']:
+        return 0.0
 
-def score2(stats: Stats, key: Snippet) -> float:
-    s = stats.totals[key]
+    if 'merged' in s:
+        if s['merged_positive'] >= s['merged_negative']:
+            return 0.0
+
     total = float(s['added']+s['deleted'])
     return math.log(total+1) * s['deleted'] / total
 
-def score3(stats: Stats, key: Snippet) -> float:
+def score2(stats: Stats, key: Snippet) -> float:
     s = stats.totals[key]
+    if s['added'] > s['deleted']:
+        return 0.0
+
+    if 'merged' in s:
+        if s['merged_positive'] >= s['merged_negative']:
+            return 0.0
+
     total_repos = len(stats.per_repo)
     n_repos = 0
     neg_repos = 0
@@ -39,13 +49,21 @@ def score3(stats: Stats, key: Snippet) -> float:
         s = d[key]
         if s['deleted'] >= s['added']:
             neg_repos += 1
+
+    if neg_repos <= (n_repos - neg_repos):
+        return 0.0
+
     return math.log(n_repos+1) / math.log(total_repos + 1) * neg_repos / n_repos
 
-def print_top(stats: Stats) -> None:
+def score_avg(stats: Stats, key: Snippet) -> float:
+    s = stats.totals[key]
+    scores = [v for k, v in s.items() if k.startswith('score_')]
+    return float(sum(scores)) / len(scores)
+
+def compute_ranking(stats: Stats) -> None:
     rankers = [
         Ranker(lambda x: score1(stats, x)),
         Ranker(lambda x: score2(stats, x)),
-        Ranker(lambda x: score3(stats, x))
     ]
     
     for s in stats.totals:
@@ -55,17 +73,35 @@ def print_top(stats: Stats) -> None:
     for r in rankers:
         r.finalize()
 
-    ranker = rankers[2]
+    for snpt in stats.totals:
+        s = stats.totals[snpt]
+        for i, r in enumerate(rankers):
+            s['score_%d' % (i+1)] = r.get(snpt)
 
-    top = list(reversed(sorted(stats.totals.keys(), key=lambda x: ranker.get(x))))
-    top = top[:10]
+    rankers = None
+    r = Ranker(lambda x: score_avg(stats, x))
+    for s in stats.totals:
+        r.add(s)
+    r.finalize()
+    for snpt in stats.totals:
+        s = stats.totals[snpt]
+        s['score'] = r.get(snpt)
+
+def prune(stats: Stats, min_score: float) -> None:
+    stats.totals = dict([(k, v) for k, v in stats.totals.items() if v['score'] >= min_score])
+    for d in stats.per_repo.values():
+        for snpt in list(d.keys()):
+            if snpt not in stats.totals:
+                del d[snpt]
+
+def print_top(stats: Stats, k: int) -> None:
+    top = list(reversed(sorted(stats.totals.keys(), key=lambda x: stats.totals[x]['score'])))
+    top = top[:k]
     print('TOTAL: %d' % len(stats.totals))
     for n, s in enumerate(top):
         print('--- SNIPPET %d ---' % n)
         print('STATS: %s' % stats.totals[s])
         print('REPOS: %d' % len([1 for d in stats.per_repo.values() if s in d]))
-        for i, ranker in enumerate(rankers):
-            print('SCORE%d: %f' % (i+1, ranker.get(s)))
         print('TEXT:')
         print(s.text)
         print('UAST:')
@@ -128,7 +164,13 @@ def merge_similar(stats: Stats) -> None:
                 stats.merge_snippet(dst=snippet, src=snpt[0], positive=True)
 
 def postprocess(path: str):
-    stats = Stats.load(filename=path)
+    merged_path = path + '_merged'
+    ranked_path = merged_path + '_ranked'
+    pruned_path = ranked_path + '_pruned'
+
+    stats = None
+    print('--- LOADING STATS ---')
+
     #print('--- NO POSTPROCESSING ---')
     #print_top(stats)
 
@@ -136,9 +178,37 @@ def postprocess(path: str):
     #merge_same_text(stats)
     #print_top(stats)
 
-    print('--- POSTPROCESSING (merge similars) ---')
-    merge_similar(stats)
-    print_top(stats)
+    if not os.path.exists(merged_path):
+        if stats is None:
+            stats = Stats.load(filename=path)
+        print('--- POSTPROCESSING (merge similars) ---')
+        merge_similar(stats)
+        stats.save(filename=merged_path)
+    
+    if not os.path.exists(ranked_path):
+        if stats is None:
+            stats = Stats.load(filename=merged_path)
+        print('--- RANKING ---')
+        compute_ranking(stats)
+        stats.save(filename=ranked_path)
+
+    if not os.path.exists(pruned_path):
+        if stats is None:
+            stats = Stats.load(filename=ranked_path)
+        min_score = 0.98
+        print('--- PRUNING ---')
+        print('MIN_SCORE: %f' % min_score)
+        print('BEFORE: %d' % len(stats.totals))
+        prune(stats, min_score=min_score)
+        compute_ranking(stats)
+        print('AFTER: %d' % len(stats.totals))
+        stats.save(filename=pruned_path)
+
+    if stats is None:
+        stats = Stats.load(filename=pruned_path)
+
+    print('--- TOP ---')
+    print_top(stats, k=20)
 
 def main():
     bblfsh_monkey_patch()
