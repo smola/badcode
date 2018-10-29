@@ -36,8 +36,10 @@ class Stats:
             self.totals,
             other.totals)
         for repo, val in other.per_repo.items():
+            if repo not in self.per_repo:
+                self.per_repo[repo] = {}
             self._merge_dict_of_dicts_of_int_values(
-                self.per_repo.get(repo, {}), val)
+                self.per_repo[repo], val)
         return self
 
     def _merge_dict_of_dicts_of_int_values(self, a, b):
