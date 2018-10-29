@@ -171,17 +171,12 @@ def postprocess(path: str):
     stats = None
     print('--- LOADING STATS ---')
 
-    #print('--- NO POSTPROCESSING ---')
-    #print_top(stats)
-
-    #print('--- POSTPROCESSING (merge same text) ---')
-    #merge_same_text(stats)
-    #print_top(stats)
-
     if not os.path.exists(merged_path):
         if stats is None:
             stats = Stats.load(filename=path)
-        print('--- POSTPROCESSING (merge similars) ---')
+        print('--- POSTPROCESSING (merge same text) ---')
+        merge_same_text(stats)
+        print('--- POSTPROCESSING (merge with wildcards) ---')
         merge_similar(stats)
         stats.save(filename=merged_path)
     
