@@ -89,7 +89,7 @@ class Change:
             ','.join(map(str, self.deleted_lines)))
 
 def is_vendor(path):
-    if path.startswith('vendor'):
+    if path.startswith('vendor') or '/vendor/' in path:
         return True
     if 'bindata.go' in path:
         return True
