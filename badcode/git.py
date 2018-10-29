@@ -15,14 +15,14 @@ def git_apply_settings():
     
 
 class FileFilter:
-    def match(self, path: str, content: str = None) -> bool:
+    def match(self, path: str, size: int ) -> bool:
         return True
 
 class LanguageFilter(FileFilter):
     def __init__(self, languages: typing.Iterable[str]) -> None:
         self.languages = set([l.lower() for l in languages])
 
-    def match(self, path: str, content: str = None) -> bool:
+    def match(self, path: str, size: int) -> bool:
         language = get_language(path).lower()
         return language in self.languages
 
@@ -30,8 +30,15 @@ class VendorFilter(FileFilter):
     def __init__(self):
         pass
 
-    def match(self, path: str, content: str = None) -> bool:
+    def match(self, path: str, size: int) -> bool:
         return not is_vendor(path)
+
+class MaxSizeFilter(FileFilter):
+    def __init__(self, max_size: int) -> None:
+        self.max_size = max_size
+
+    def match(self, path: str, size: int) -> bool:
+        return size <= self.max_size
 
 class Change:
     def __init__(self,
@@ -158,12 +165,14 @@ class Repository:
         new_blob_hash = patch.delta.new_file.id
         old_path = patch.delta.old_file.path
         new_path = patch.delta.new_file.path
+        old_size = patch.delta.old_file.size
+        new_size = patch.delta.new_file.size
 
         for filter in filters:
-            if not filter.match(old_path):
+            if not filter.match(path=old_path, size=old_size):
                 logger.debug('filtered out old path: %s (%s)' % (old_path, filter))
                 return None
-            if not filter.match(new_path):
+            if not filter.match(path=new_path, size=new_size):
                 logger.debug('filtered out new path: %s (%s)' % (new_path, filter))
                 return None
 

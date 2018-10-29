@@ -108,7 +108,11 @@ class RepositoryAnalyzer:
         history = self.repo.walk_history(head)
         changes = self.repo.extract_changes(
             commits=history,
-            filters=[VendorFilter(), LanguageFilter(['Go'])])
+            filters=[
+                VendorFilter(),
+                LanguageFilter(['Go']),
+                MaxSizeFilter(max_size=10*1024)
+                ])
         for change in changes:
             self.process_change(change)
 
