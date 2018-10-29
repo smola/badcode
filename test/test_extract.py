@@ -2,10 +2,9 @@
 import unittest
 
 from bblfsh import Node
-from badcode.bblfshutil import bblfsh_monkey_patch
-from badcode.bblfshutil import extract_subtrees
-from badcode.bblfshutil import extract_paths
-from badcode.bblfshutil import is_relevant_node
+from badcode.extract import extract_subtrees
+from badcode.extract import extract_paths
+from badcode.extract import is_relevant_node
 
 def test_is_relevant_node():
     node = Node()
@@ -26,8 +25,6 @@ def test_is_relevant_node():
     assert not is_relevant_node(node, lines=set([1,5]))
 
 def test_extract_subtrees_all_positions():
-    bblfsh_monkey_patch()
-
     root = Node()
     root.internal_type = 'root'
     root.start_position.line = 1

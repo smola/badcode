@@ -3,16 +3,26 @@ import logging
 import types
 import typing
 
+from cachetools import LRUCache
+import bblfsh
 import pygit2
+
+from .bblfshutil import filter_node
+from .core import Change
+from .core import File
+from .extract import TreeExtractor
+from .settings import *
+from .stats import Stats
 
 logger = logging.getLogger(__name__)
 
-def git_apply_settings():
+def _git_apply_settings():
     pygit2.settings.cache_object_limit(pygit2.GIT_OBJ_BLOB, 100 * 1024 * 1024)
     pygit2.settings.cache_object_limit(pygit2.GIT_OBJ_COMMIT, 100 * 1024 * 1024)
     pygit2.settings.cache_object_limit(pygit2.GIT_OBJ_TREE, 100 * 1024 * 1024)
     pygit2.settings.cache_object_limit(pygit2.GIT_OBJ_TAG, 100 * 1024 * 1024)
-    
+
+_git_apply_settings()
 
 class FileFilter:
     def match(self, path: str, size: int ) -> bool:
@@ -40,54 +50,6 @@ class MaxSizeFilter(FileFilter):
     def match(self, path: str, size: int) -> bool:
         return size <= self.max_size
 
-class Change:
-    def __init__(self,
-        commit_id: pygit2.Oid,
-        old_path: str, old_blob_hash: str,
-        deleted_lines: typing.Iterable[int],
-        new_path: str, new_blob_hash: str,
-        added_lines: typing.Iterable[int]) -> None:
-        self._commit_id = commit_id
-        self._old_path = old_path
-        self._old_blob_hash = old_blob_hash
-        self._deleted_lines = set(deleted_lines)
-        self._new_path = new_path
-        self._new_blob_hash = new_blob_hash
-        self._added_lines = set(added_lines)
-
-    @property
-    def commit_id(self):
-        return self._commit_id
-
-    @property
-    def old_path(self) -> str:
-        return self._old_path
-    
-    @property
-    def old_blob_hash(self) -> str:
-        return self._old_blob_hash
-
-    @property
-    def deleted_lines(self) -> typing.Set[int]:
-        return self._deleted_lines
-
-    @property
-    def new_path(self) -> str:
-        return self._new_path
-    
-    @property
-    def new_blob_hash(self) -> str:
-        return self._new_blob_hash
-
-    @property
-    def added_lines(self) -> typing.Set[int]:
-        return self._added_lines
-
-    def __repr__(self) -> str:
-        return 'Change(commit_id=%s, old_path=%s, old_blob_hash=%s, lines=%s)' % (
-            self.commit_id, self.old_path, self.old_blob_hash,
-            ','.join(map(str, self.deleted_lines)))
-
 def is_vendor(path):
     if path.startswith('vendor') or '/vendor/' in path:
         return True
@@ -102,12 +64,30 @@ def get_language(path: str) -> str:
         return 'Go'
     return 'Other'
 
+def get_repository(repo_name: str) -> pygit2.Repository:
+    repo_dir = DEFAULT_REPO_DIR / repo_name
+    if repo_dir.exists():
+        return pygit2.Repository(str(repo_dir))
+    logger.info('cloning repository: %s' % repo_name)
+    url = 'git://github.com/%s.git' % repo_name
+    repo = pygit2.clone_repository(
+        url=url,
+        path=str(repo_dir),
+        bare=True)
+    return repo
 
-class Repository:
-    def __init__(self, repo: typing.Union[str,pygit2.Repository]) -> None:
+class GitRepository:
+    def __init__(self,
+            repo: typing.Union[str,pygit2.Repository],
+            client: bblfsh.BblfshClient,
+            filters: typing.Iterable[FileFilter]) -> None:
         if isinstance(repo, str):
             repo = pygit2.Repository(repo)
         self.repo = repo
+        self.client = client
+        self.filters = filters
+        #TODO(smola): parameterize cache size
+        self.cache = LRUCache(maxsize=2000)
 
     def reference(self, ref: str) -> pygit2.Commit:
         refobj = self.repo.lookup_reference(ref)
@@ -126,12 +106,17 @@ class Repository:
         for c in self.repo.walk(commit_id, pygit2.GIT_SORT_TOPOLOGICAL|pygit2.GIT_SORT_REVERSE):
             yield c
 
+    def extract_changes_from_history(self,
+            commit: typing.Union[pygit2.Oid,pygit2.Commit]) -> typing.Generator[pygit2.Commit,None,None]:
+        for c in self.extract_changes(self.walk_history(commit)):
+            yield c
+
     def extract_changes(self,
             commits: typing.Union[pygit2.Commit,typing.Generator[pygit2.Commit,None,None]],
-            filters: typing.Iterable[FileFilter]) -> typing.Generator[pygit2.Commit,None,None]:
+            ) -> typing.Generator[pygit2.Commit,None,None]:
         if isinstance(commits, types.GeneratorType):
             for commit in commits:
-                for change in self.extract_changes(commit, filters):
+                for change in self.extract_changes(commit):
                     yield change
             return
         
@@ -150,45 +135,133 @@ class Repository:
             interhunk_lines=1)
         #PERF: diff.find_similar()
         for patch in diff:
-            change = self.extract_change_from_patch(commit.id, patch, filters)
+            change = self._extract_change_from_patch(commit.id, patch)
             if change is None:
                 continue
             yield change
 
-    def extract_change_from_patch(self,
+    def _extract_change_from_patch(self,
             commit_id: pygit2.Oid,
-            patch: pygit2.Patch,
-            filters: typing.Iterable[FileFilter]) -> typing.Optional[Change]:
+            patch: pygit2.Patch) -> typing.Optional[Change]:
         if patch.delta.status_char() != 'M':
             return None
-        old_blob_hash = patch.delta.old_file.id
-        new_blob_hash = patch.delta.new_file.id
-        old_path = patch.delta.old_file.path
-        new_path = patch.delta.new_file.path
-        old_size = patch.delta.old_file.size
-        new_size = patch.delta.new_file.size
+        if not self._match_patch(patch):
+            return None
 
-        for filter in filters:
-            if not filter.match(path=old_path, size=old_size):
-                logger.debug('filtered out old path: %s (%s)' % (old_path, filter))
-                return None
-            if not filter.match(path=new_path, size=new_size):
-                logger.debug('filtered out new path: %s (%s)' % (new_path, filter))
-                return None
+        logger.debug('extracting changes from file: %s -> %s' % (
+            patch.delta.old_file.path, patch.delta.new_file.path))
 
-        logger.debug('extracting changes from file: %s -> %s' % (old_path, new_path))
+        added_lines, deleted_lines = self._get_added_deleted_lines(patch)
+        base_file = self._extract_file_from_difffile(patch.delta.old_file)
+        if not base_file:
+            return None
+        head_file = self._extract_file_from_difffile(patch.delta.new_file)
+        if not head_file:
+            return None
 
+        return Change(
+            commit_id=str(commit_id),
+            base=base_file,
+            head=head_file,
+            deleted_lines=deleted_lines,
+            added_lines=added_lines)
+
+    def _match_patch(self, patch: pygit2.Patch) -> bool:
+        for filter in self.filters:
+            if not filter.match(
+                    path=patch.delta.old_file.path,
+                    size=patch.delta.old_file.size):
+                logger.debug('filtered out old path: %s (%s)' % (patch.delta.old_file.path, filter))
+                return False
+            if not filter.match(
+                    path=patch.delta.new_file.path,
+                    size=patch.delta.new_file.size):
+                logger.debug('filtered out new path: %s (%s)' % (patch.delta.new_file.path, filter))
+                return False
+        return True
+
+    def _get_added_deleted_lines(self, patch: pygit2.Patch) -> typing.Tuple[typing.List[int],typing.List[int]]:
         deleted_lines: typing.List[int] = []
-        for hunk in patch.hunks:
-            deleted_lines += [line.old_lineno for line in hunk.lines if line.new_lineno == -1]
         added_lines: typing.List[int] = []
         for hunk in patch.hunks:
+            deleted_lines += [line.old_lineno for line in hunk.lines if line.new_lineno == -1]
             added_lines += [line.new_lineno for line in hunk.lines if line.old_lineno == -1]
-        return Change(
-            commit_id=commit_id,
-            old_path=old_path,
-            old_blob_hash=old_blob_hash,
-            deleted_lines=deleted_lines,
-            new_path=new_path,
-            new_blob_hash=new_blob_hash,
-            added_lines=added_lines)
+        return added_lines, deleted_lines
+
+    def _extract_file_from_difffile(self, file: pygit2.DiffFile) -> File:
+        blob_hash = str(file.id)
+        content, uast = self._get_blob_uast(blob_hash, file.path)
+        if not uast:
+            return None
+        return File(
+            blob_hash=blob_hash,
+            path=file.path,
+            content=content,
+            uast=uast
+        )
+
+    def _get_blob_uast(self, blob_hash, path):
+        if blob_hash in self.cache:
+            content, uast = self.cache[blob_hash]
+            return content, uast
+        content = self.repo.get(blob_hash).data
+        uast = self._get_uast(path, blob_hash, content)
+        self.cache[blob_hash] = (content, uast)
+        return content, uast
+
+    def _get_uast(self, path, blob_hash, content):
+        try:
+            response = self.client.parse(filename=path, contents=content)
+        except Exception as exc:
+            logging.error('bblfsh parsing error raised: %s' % {
+                'file': path,
+                'hash': blob_hash,
+                'exception': exc})
+            return None
+        if response.status != 0:
+                logging.error('bblfsh parsing error: %s' % {
+                    'file': path,
+                    'hash': blob_hash,
+                    'error': str(response.errors)})
+                return None
+        uast = response.uast
+        #TODO(smola): remove this, do it later in Stats
+        filter_node(uast)
+        return uast
+
+class GitRepositoryTrainer(GitRepository):
+
+    def __init__(self,
+            repo_name: str,
+            repo: typing.Union[str,pygit2.Repository],
+            client: bblfsh.BblfshClient,
+            stats: Stats,
+            filters: typing.Iterable[FileFilter]) -> None:
+        super(GitRepositoryTrainer, self).__init__(repo, client, filters)
+        self.repo_name = repo_name
+        self.stats = stats
+        self.tree_extractor = TreeExtractor(
+            min_depth=DEFAULT_MIN_SUBTREE_DEPTH,
+            max_depth=DEFAULT_MAX_SUBTREE_DEPTH,
+            min_size=DEFAULT_MIN_SUBTREE_SIZE,
+            max_size=DEFAULT_MAX_SUBTREE_SIZE
+        )
+
+    def train_all(self) -> None:
+        head = self.reference('refs/heads/master')
+        if head is None:
+            logger.warning('no master')
+            return
+        for change in self.extract_changes_from_history(head):
+            self.train(change)
+
+    def train(self, change: Change) -> None:
+        logger.debug('processing change: %s' % change)
+        for snippet in self.tree_extractor.get_snippets(
+                file=change.base,
+                lines=change.deleted_lines):
+            self.stats.deleted(self.repo_name, snippet)
+        for snippet in self.tree_extractor.get_snippets(
+                file=change.head,
+                lines=change.added_lines):
+            self.stats.added(self.repo_name, snippet)

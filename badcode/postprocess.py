@@ -201,5 +201,4 @@ def postprocess(path: str):
     print_top(stats, k=50)
 
 def main():
-    bblfsh_monkey_patch()
     postprocess(sys.argv[1])
