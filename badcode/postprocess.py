@@ -6,6 +6,7 @@ import typing
 
 from badcode.stats import *
 from badcode.bblfsh import *
+from badcode.ranker import Ranker
 from badcode.treedist import node_distance
 from badcode.treedist import fast_distance
 from badcode.treedist import node_merge
@@ -16,30 +17,55 @@ from badcode.treedist import TreeToSeq
 import bblfsh
 
 
-def simple_score(s):
+def score1(stats: Stats, key: Snippet) -> float:
+    s = stats.totals[key]
     total = float(s['added']+s['deleted'])
     return s['deleted'] / total
 
-def score(stats: Stats, key: Snippet) -> float:
+def score2(stats: Stats, key: Snippet) -> float:
     s = stats.totals[key]
-    n_repos = len([1 for d in stats.per_repo.values() if key in d])
-    total_repos = len(stats.per_repo)
-    pct_repo = float(n_repos) / total_repos
-    
     total = float(s['added']+s['deleted'])
-    # TODO: currently fails on merged nodes
-    #return math.log(pct_repo*100) * s['deleted'] / total
-    return math.log(total) * s['deleted'] / total
+    return math.log(total+1) * s['deleted'] / total
+
+def score3(stats: Stats, key: Snippet) -> float:
+    s = stats.totals[key]
+    total_repos = len(stats.per_repo)
+    n_repos = 0
+    neg_repos = 0
+    for d in stats.per_repo.values():
+        if key not in d:
+            continue
+        n_repos += 1
+        s = d[key]
+        if s['deleted'] >= s['added']:
+            neg_repos += 1
+    return math.log(n_repos+1) / math.log(total_repos + 1) * neg_repos / n_repos
 
 def print_top(stats: Stats) -> None:
-    top = list(reversed(sorted(stats.totals.keys(), key=lambda x: score(stats, x))))
+    rankers = [
+        Ranker(lambda x: score1(stats, x)),
+        Ranker(lambda x: score2(stats, x)),
+        Ranker(lambda x: score3(stats, x))
+    ]
+    
+    for s in stats.totals:
+        for r in rankers:
+            r.add(s)
+
+    for r in rankers:
+        r.finalize()
+
+    ranker = rankers[2]
+
+    top = list(reversed(sorted(stats.totals.keys(), key=lambda x: ranker.get(x))))
     top = top[:10]
     print('TOTAL: %d' % len(stats.totals))
     for n, s in enumerate(top):
         print('--- SNIPPET %d ---' % n)
         print('STATS: %s' % stats.totals[s])
         print('REPOS: %d' % len([1 for d in stats.per_repo.values() if s in d]))
-        print('SCORE: %f' % score(stats, s))
+        for i, ranker in enumerate(rankers):
+            print('SCORE%d: %f' % (i+1, ranker.get(s)))
         print('TEXT:')
         print(s.text)
         print('UAST:')
@@ -47,6 +73,7 @@ def print_top(stats: Stats) -> None:
         print()
 
 def merge_same_text(stats: Stats) -> None:
+    #FIXME: does not merge per_repo
     per_text = {}
     for snippet, st in stats.totals.items():
         if snippet.text not in per_text:
@@ -102,12 +129,12 @@ def merge_similar(stats: Stats) -> None:
 
 def postprocess(path: str):
     stats = Stats.load(filename=path)
-    print('--- NO POSTPROCESSING ---')
-    print_top(stats)
+    #print('--- NO POSTPROCESSING ---')
+    #print_top(stats)
 
-    print('--- POSTPROCESSING (merge same text) ---')
-    merge_same_text(stats)
-    print_top(stats)
+    #print('--- POSTPROCESSING (merge same text) ---')
+    #merge_same_text(stats)
+    #print_top(stats)
 
     print('--- POSTPROCESSING (merge similars) ---')
     merge_similar(stats)
