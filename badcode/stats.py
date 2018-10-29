@@ -6,7 +6,7 @@ import typing
 
 import bblfsh
 
-from .bblfsh import Snippet
+from .bblfshutil import Snippet
 
 DEFAULT_STATS_DB = 'stats.db'
 

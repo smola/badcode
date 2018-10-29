@@ -3,10 +3,10 @@ import math
 import sys
 import typing
 
-from badcode.stats import Stats
-from badcode.git import *
-from badcode.bblfsh import *
-from badcode.main import *
+from .stats import Stats
+from .git import *
+from .bblfshutil import *
+from .main import *
 
 import bblfsh
 

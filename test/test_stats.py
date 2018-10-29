@@ -2,7 +2,7 @@
 import unittest
 
 from bblfsh import Node
-from badcode.bblfsh import Snippet
+from badcode.bblfshutil import Snippet
 from badcode.stats import Stats
 
 def test_stats_iadd():

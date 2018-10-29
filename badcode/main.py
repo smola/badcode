@@ -7,7 +7,7 @@ import sys
 import bblfsh
 from cachetools import LRUCache
 
-from .bblfsh import *
+from .bblfshutil import *
 from .git import *
 from .stats import *
 

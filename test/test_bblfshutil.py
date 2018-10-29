@@ -2,10 +2,10 @@
 import unittest
 
 from bblfsh import Node
-from badcode.bblfsh import bblfsh_monkey_patch
-from badcode.bblfsh import extract_subtrees
-from badcode.bblfsh import extract_paths
-from badcode.bblfsh import is_relevant_node
+from badcode.bblfshutil import bblfsh_monkey_patch
+from badcode.bblfshutil import extract_subtrees
+from badcode.bblfshutil import extract_paths
+from badcode.bblfshutil import is_relevant_node
 
 def test_is_relevant_node():
     node = Node()

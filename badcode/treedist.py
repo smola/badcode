@@ -4,8 +4,8 @@ import typing
 
 import bblfsh
 
-from .bblfsh import uast_eq_node
-from .bblfsh import uast_iter
+from .bblfshutil import uast_eq_node
+from .bblfshutil import uast_iter
 
 
 def fast_distance(a: bblfsh.Node, b: bblfsh.Node, max_dist: int) -> int:
