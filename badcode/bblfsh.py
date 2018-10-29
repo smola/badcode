@@ -224,6 +224,12 @@ def uast_size(n: bblfsh.Node) -> int:
         return 1
     return 1 + sum([uast_size(x) for x in n.children])
 
+def uast_pretty_format(n: bblfsh.Node, indent=0) -> str:
+    s = '%stype: %s, token: %s' % ('. ' * indent, n.internal_type, n.token)
+    for c in n.children:
+        s += '\n' + uast_pretty_format(c, indent=indent+1)
+    return s
+
 def is_relevant_tree(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
     if is_relevant_node(uast, lines):
         return True

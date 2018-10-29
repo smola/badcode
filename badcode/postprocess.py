@@ -105,7 +105,7 @@ def print_top(stats: Stats, k: int) -> None:
         print('TEXT:')
         print(s.text)
         print('UAST:')
-        print(s.uast)
+        print(uast_pretty_format(s.uast))
         print()
 
 def merge_same_text(stats: Stats) -> None:
@@ -203,7 +203,7 @@ def postprocess(path: str):
         stats = Stats.load(filename=pruned_path)
 
     print('--- TOP ---')
-    print_top(stats, k=20)
+    print_top(stats, k=50)
 
 def main():
     bblfsh_monkey_patch()
