@@ -1,4 +1,5 @@
 
+import collections
 import math
 import sys
 import typing
@@ -89,24 +90,15 @@ def merge_similar(stats: Stats) -> None:
             merged_sizes[merged_snippet] = len(tree_seq)
 
     for snippet, lst in merged_snippets.items():
-        s = {'added': 0, 'deleted': 0}
         for snpt in lst:
-            st = stats.totals[snpt]
-            s['added'] += st['added']
-            s['deleted'] += st['deleted']
-        s['merged_negative'] = len(lst)
-        s['merged_positive'] = 0
+            stats.merge_snippet(dst=snippet, src=snpt, positive=False)
         uast_size = merged_sizes[snippet]
         for snpt in positive_snippets:
             if uast_size != len(snpt[2]):
                 continue
             if uast_eq_wildcards(snippet.uast, snpt[3]):
                 st = stats.totals[snpt[0]]
-                s['added'] += st['added']
-                s['deleted'] += st['deleted']
-                s['merged_positive'] += 1
-        s['merged'] = s['merged_negative'] + s['merged_positive']
-        stats.totals[snippet] = s
+                stats.merge_snippet(dst=snippet, src=snpt[0], positive=True)
 
 def postprocess(path: str):
     stats = Stats.load(filename=path)

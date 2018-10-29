@@ -55,6 +55,25 @@ class Stats:
             c[k] += v
         return c
 
+    def merge_snippet(self, dst: Snippet, src: Snippet, positive: bool) -> None:
+        self._merge_stats(self.totals, dst, src, positive)
+        for d in self.per_repo.values():
+            self._merge_stats(d, dst, src, positive)
+
+    def _merge_stats(self, d, dst: Snippet, src: Snippet, positive: bool) -> None:
+        if src not in d:
+            return
+        dst_stats = d.get(dst, collections.defaultdict(int))
+        src_stats = d[src]
+        dst_stats['added'] += src_stats['added']
+        dst_stats['deleted'] += src_stats['deleted']
+        if positive:
+            dst_stats['merged_positive'] += 1
+        else:
+            dst_stats['merged_negative'] += 1
+        dst_stats['merged'] += 1
+        d[dst] = dst_stats
+
     def save(self, filename=DEFAULT_STATS_DB) -> None:
         with open(filename, 'wb') as f:
             pickle.dump(self, f)
