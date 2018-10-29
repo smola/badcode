@@ -8,10 +8,6 @@ import typing
 from badcode.stats import *
 from badcode.bblfsh import *
 from badcode.ranker import Ranker
-from badcode.treedist import node_distance
-from badcode.treedist import fast_distance
-from badcode.treedist import node_merge
-from badcode.treedist import single_node_merge
 from badcode.treedist import single_node_merge_precalc
 from badcode.treedist import TreeToSeq
 
