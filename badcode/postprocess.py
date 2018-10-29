@@ -195,7 +195,6 @@ def postprocess(path: str):
         print('MIN_SCORE: %f' % min_score)
         print('BEFORE: %d' % len(stats.totals))
         prune(stats, min_score=min_score)
-        compute_ranking(stats)
         print('AFTER: %d' % len(stats.totals))
         stats.save(filename=pruned_path)
 
