@@ -88,3 +88,9 @@ class Stats:
         if os.path.exists(filename):
             return Stats.load(filename)
         return Stats()
+
+    def match(self, node: bblfsh.Node) -> typing.Optional[Snippet]:
+        for s in self.totals:
+            if s.match(node):
+                return s
+        return None

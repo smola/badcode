@@ -8,7 +8,6 @@ import typing
 from .stats import *
 from .bblfshutil import *
 from .ranker import Ranker
-from .settings import *
 from .treedist import single_node_merge_precalc
 from .treedist import TreeToSeq
 

@@ -8,6 +8,7 @@ import pygit2
 from .core import File
 from .bblfshutil import Snippet
 from .bblfshutil import remove_positions
+from .bblfshutil import first_line
 
 
 class Path:
@@ -150,8 +151,8 @@ class TreeExtractor:
 
     def get_snippets(self,
             file: File,
-            lines: typing.Set[int]) -> typing.Generator[Snippet,None,None]:
-        subtrees = [subtree for subtree in extract_subtrees(
+            lines: typing.Set[int]) -> typing.Generator[typing.Tuple[int,Snippet],None,None]:
+        subtrees = [(first_line(u), u) for u in extract_subtrees(
             uast=file.uast,
             min_depth=self.min_depth,
             max_depth=self.max_depth,
@@ -159,7 +160,7 @@ class TreeExtractor:
             max_size=self.max_size,
             lines=lines)]
         n = 0
-        for subtree in subtrees:
+        for line, subtree in subtrees:
             if not is_relevant_tree(subtree, lines):
                 return
             if subtree.internal_type == 'Position':
@@ -171,5 +172,5 @@ class TreeExtractor:
             snippet = Snippet.from_uast_blob(subtree, file.content.decode())
             remove_positions(snippet.uast)
 
-            yield snippet
+            yield line, snippet
         logging.debug('got relevant subtrees: %d', n)

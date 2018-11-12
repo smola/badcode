@@ -194,7 +194,7 @@ class GitRepository:
         if not uast:
             return None
         return File(
-            blob_hash=blob_hash,
+            hash=blob_hash,
             path=file.path,
             content=content,
             uast=uast
@@ -257,11 +257,11 @@ class GitRepositoryTrainer(GitRepository):
 
     def train(self, change: Change) -> None:
         logger.debug('processing change: %s' % change)
-        for snippet in self.tree_extractor.get_snippets(
+        for line, snippet in self.tree_extractor.get_snippets(
                 file=change.base,
                 lines=change.deleted_lines):
             self.stats.deleted(self.repo_name, snippet)
-        for snippet in self.tree_extractor.get_snippets(
+        for line, snippet in self.tree_extractor.get_snippets(
                 file=change.head,
                 lines=change.added_lines):
             self.stats.added(self.repo_name, snippet)

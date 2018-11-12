@@ -6,11 +6,11 @@ import bblfsh
 class File:
     def __init__(self,
             path: str,
-            blob_hash: str,
+            hash: str,
             content: str,
             uast: bblfsh.Node) -> None:
         self._path = path
-        self._blob_hash = blob_hash,
+        self._hash = hash,
         self._content = content
         self._uast = uast
 
@@ -19,8 +19,8 @@ class File:
         return self._path
     
     @property
-    def blob_hash(self) -> str:
-        return self._blob_hash
+    def hash(self) -> str:
+        return self._hash
 
     @property
     def content(self) -> str:
@@ -31,7 +31,7 @@ class File:
         return self._uast
 
     def __repr__(self) -> str:
-        return 'File(blob_hash=%s, path=%s)' % (self.blob_hash, self.path)
+        return 'File(hash=%s, path=%s)' % (self.hash, self.path)
 
 class Change:
     def __init__(self,

@@ -7,7 +7,6 @@ from cachetools import LRUCache
 
 from .extract import TreeExtractor
 from .bblfshutil import bblfsh_monkey_patch
-from .bblfshutil import filter_node
 from .git import *
 from .settings import *
 from .stats import *

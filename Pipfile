@@ -7,6 +7,7 @@ name = "pypi"
 pygit2 = '==0.27.2'
 bblfsh = "==2.12.6"
 cachetools = "*"
+lookout-sdk = "*"
 
 [dev-packages]
 pylint = "*"
