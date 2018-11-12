@@ -147,6 +147,19 @@ def remove_positions(uast: bblfsh.Node) -> None:
     for child in uast.children:
         remove_positions(child)
 
+def first_line(uast: bblfsh.Node) -> int:
+    max_line = 9223372036854775807
+    line = max_line
+    if uast.start_position.line != 0:
+        line = uast.start_position.line
+    children = [c for c in uast.children]
+    if len(children) > 0:
+        min_child = min([first_line(child) for child in uast.children])
+        line = min([line, min_child])
+    if line == max_line:
+        line = 0
+    return line
+
 def set_zero_position(uast: bblfsh.Node) -> None:
     uast.start_position.offset = 0
     uast.start_position.line = 0
