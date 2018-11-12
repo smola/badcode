@@ -32,6 +32,9 @@ class Snippet:
     def text(self):
         return self._text
 
+    def match(self, uast: bblfsh.Node) -> bool:
+        return uast_eq_wildcards(self.uast, uast)
+
     def _ensure_ser(self):
         if self._ser is None:
             self._ser = self._uast.SerializeToString()

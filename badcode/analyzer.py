@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 
 import collections
+import difflib
 import grpc
 import os
 import sys
@@ -13,17 +14,20 @@ from lookout.sdk import service_analyzer_pb2
 from lookout.sdk import service_data_pb2_grpc
 from lookout.sdk import service_data_pb2
 
-from .bblfshutil import bblfsh_monkey_patch
 from .extract import TreeExtractor
 from .settings import *
 from .stats import Stats
+
+#TODO(smola): remove this
+from .bblfshutil import bblfsh_monkey_patch
+bblfsh_monkey_patch()
 
 #TODO(smola): set from single source
 version = "alpha"
 grpc_max_msg_size = 100 * 1024 * 1024 #100mb
 
 class Analyzer(service_analyzer_pb2_grpc.AnalyzerServicer):
-    def __init__(self, data_srv_addr):
+    def __init__(self, data_srv_addr, model_path):
         super(Analyzer).__init__()
         self.data_srv_addr = data_srv_addr
         self.tree_extractor = TreeExtractor(
@@ -32,10 +36,10 @@ class Analyzer(service_analyzer_pb2_grpc.AnalyzerServicer):
             min_size=DEFAULT_MIN_SUBTREE_SIZE,
             max_size=DEFAULT_MAX_SUBTREE_SIZE
         )
-        merged_path = str(DEFAULT_STATS_PATH) + '_merged'
-        ranked_path = merged_path + '_ranked'
-        pruned_path = ranked_path + '_pruned'
-        self.stats = Stats.load(pruned_path)
+
+        logger.info('Loading model: %s' % model_path)
+        self.stats = Stats.load(model_path)
+        logger.info('Loaded model: %s' % model_path)
 
     def NotifyReviewEvent(self, request, context):
         logger.info("got review request {}".format(request))
@@ -63,16 +67,28 @@ class Analyzer(service_analyzer_pb2_grpc.AnalyzerServicer):
                 continue
             
             #TODO(smola): better handling of change.added_lines
-            lines = set(range(1, len(change.head.content.splitlines()) + 1))
+            seqm = difflib.SequenceMatcher(
+                None,
+                change.base.content.splitlines(),
+                change.head.content.splitlines(),
+                )
+            opcodes = seqm.get_opcodes()
+            lines = set()
+            for opcode in opcodes:
+                if opcode[0] in ('insert', 'replace'):
+                    lines |= set(range(opcode[3]+1, opcode[4]+1))
 
             for line, snippet in self.tree_extractor.get_snippets(
                     file=change.head,
                     lines=lines):
-                if snippet in self.stats.totals:
-                    service_analyzer_pb2.Comment(
+                #TODO(smola): speed up matching
+                snippet = self.stats.match(snippet.uast)
+                if snippet:
+                    comment = service_analyzer_pb2.Comment(
                         file=change.head.path,
                         line=line,
                         text="Something looks wrong here: %s" % snippet.uast)
+                    comments.append(comment)
         logging.info("{} comments produced".format(len(comments)))
         return service_analyzer_pb2.EventResponse(analyzer_version=version, comments=comments)
 
@@ -83,10 +99,12 @@ def serve(args):
     host_to_bind = args.host
     port_to_listen = args.port
     data_srv_addr = args.data_service
+    model_path = args.model
 
-    print("starting gRPC Analyzer server at port {}".format(port_to_listen))
+    logger.info("starting gRPC Analyzer server at port {}".format(port_to_listen))
     server = grpc.server(thread_pool=ThreadPoolExecutor(max_workers=10))
-    service_analyzer_pb2_grpc.add_AnalyzerServicer_to_server(Analyzer(data_srv_addr), server)
+    analyzer = Analyzer(data_srv_addr, model_path)
+    service_analyzer_pb2_grpc.add_AnalyzerServicer_to_server(analyzer, server)
     server.add_insecure_port("{}:{}".format(host_to_bind, port_to_listen))
     server.start()
 

@@ -12,9 +12,10 @@ def main():
     subparsers = parser.add_subparsers(help='sub-command help')
     
     analyzer_parser = subparsers.add_parser('analyzer', help='run analyzer')
-    analyzer_parser.add_argument('--host', type=str, default=os.environ.get('BADCODE_HOST', "0.0.0.0"))
+    analyzer_parser.add_argument('--host', type=str, default=os.environ.get('BADCODE_HOST', '0.0.0.0'))
     analyzer_parser.add_argument('--port', type=int, default=int(os.environ.get('BADCODE_PORT', 2022)))
-    analyzer_parser.add_argument('--data-service', type=str, default=os.environ.get('BADCODE_DATA_SERVICE_URL', "localhost:10301"))
+    analyzer_parser.add_argument('--data-service', type=str, default=os.environ.get('BADCODE_DATA_SERVICE_URL', 'localhost:10301'))
+    analyzer_parser.add_argument('--model', type=str, default=os.environ.get('BADCODE_MODEL', str(DEFAULT_STATS_PATH) + '_merged_ranked_pruned'))
     analyzer_parser.set_defaults(func=serve)
 
     preprocess_parser = subparsers.add_parser('preprocess', help='preprocess repositories')
