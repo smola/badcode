@@ -8,11 +8,11 @@ import typing
 from .stats import *
 from .bblfshutil import *
 from .ranker import Ranker
+from .settings import *
 from .treedist import single_node_merge_precalc
 from .treedist import TreeToSeq
 
 import bblfsh
-
 
 def score1(stats: Stats, key: Snippet) -> float:
     s = stats.totals[key]
@@ -159,7 +159,9 @@ def merge_similar(stats: Stats) -> None:
                 st = stats.totals[snpt[0]]
                 stats.merge_snippet(dst=snippet, src=snpt[0], positive=True)
 
-def postprocess(path: str):
+def postprocess(args):
+    path = args.stats
+
     merged_path = path + '_merged'
     ranked_path = merged_path + '_ranked'
     pruned_path = ranked_path + '_pruned'
@@ -199,6 +201,3 @@ def postprocess(path: str):
 
     print('--- TOP ---')
     print_top(stats, k=50)
-
-def main():
-    postprocess(sys.argv[1])

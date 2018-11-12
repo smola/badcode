@@ -37,8 +37,8 @@ def main_per_repository(repo_name: str) -> None:
     stats.save(filename=STATS_PATH)
     logger.info('saved stats: %s' % STATS_PATH)
 
-def main():
-    repo_list_path = sys.argv[1]
+def preprocess(args):
+    repo_list_path = args.repositories
     DEFAULT_REPO_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_STATS_DIR.mkdir(parents=True, exist_ok=True)
     logger.info('Reading repository list from %s' % repo_list_path)
@@ -58,5 +58,3 @@ def main():
     global_stats.save(DEFAULT_STATS_PATH)
     logger.info('Saved merged stats')
 
-if __name__ == '__main__':
-    main()
