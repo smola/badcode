@@ -1,21 +1,20 @@
 
 import logging
 import typing
+from typing import Generator, Iterable, List, Set, Tuple
 
 import bblfsh
 import pygit2
 
 from .core import File
-from .bblfshutil import Snippet
-from .bblfshutil import remove_positions
-from .bblfshutil import first_line
+from .bblfshutil import UAST
 
 
 class Path:
     def __init__(self,
-            path: typing.List['Path'],
+            path: List['Path'],
             node: bblfsh.Node,
-            lines: typing.Set[int]) -> None:
+            lines: Set[int]) -> None:
         self.path = path
         self.node = node
         self.is_relevant = is_relevant_node(node, lines=lines)
@@ -67,7 +66,7 @@ class Path:
         return False
 
 
-def is_relevant_tree(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
+def is_relevant_tree(uast: bblfsh.Node, lines: Set[int]) -> bool:
     if is_relevant_node(uast, lines):
         return True
     for child in uast.children:
@@ -75,7 +74,7 @@ def is_relevant_tree(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
             return True
     return False
 
-def is_relevant_node(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
+def is_relevant_node(uast: bblfsh.Node, lines: Set[int]) -> bool:
     if uast.start_position.line in lines:
         return True
     if uast.end_position.line in lines:
@@ -86,7 +85,7 @@ def is_relevant_node(uast: bblfsh.Node, lines: typing.Set[int]) -> bool:
                 return True
     return False
 
-def extract_paths(root: bblfsh.Node, lines: typing.Set[int]) -> typing.Generator[Path,None,None]:
+def extract_paths(root: bblfsh.Node, lines: Set[int]) -> Generator[Path,None,None]:
     queue = [Path(path=[], node=root, lines=lines)]
     while len(queue) > 0:
         path = queue.pop()
@@ -101,7 +100,7 @@ def extract_subtrees(
         max_depth: int,
         min_size: int,
         max_size: int,
-        lines: typing.Iterable[int]) -> typing.Generator[bblfsh.Node,None,None]:
+        lines: Iterable[int]) -> Generator[bblfsh.Node,None,None]:
     if not isinstance(lines, set):
         lines = set(lines)
 
@@ -136,6 +135,39 @@ def extract_subtrees(
                 already_extracted.add(i)
                 yield parent.node
 
+def uast_blob_to_snippet(
+            uast: bblfsh.Node,
+            blob: str) -> str:
+    start, end = _get_start_end_lines(uast)
+    lines = blob.split('\n')
+    lines = [l for n, l in enumerate(lines) if n + 1 >= start and n + 1 <= end]
+    text = '\n'.join(lines)
+    return text
+
+def _get_start_end_lines(uast: bblfsh.Node) -> typing.Tuple[int, int]:
+    start = uast.start_position.line
+    end = uast.end_position.line
+    for child in uast.children:
+        cstart, cend = _get_start_end_lines(child)
+        if start == 0 or cstart < start:
+            start = cstart
+        if end == 0 or cend > end:
+            end = cend
+    return start, end
+
+def first_line(uast: bblfsh.Node) -> int:
+    max_line = 9223372036854775807
+    line = max_line
+    if uast.start_position.line != 0:
+        line = uast.start_position.line
+    children = [c for c in uast.children]
+    if len(children) > 0:
+        min_child = min([first_line(child) for child in uast.children])
+        line = min([line, min_child])
+    if line == max_line:
+        line = 0
+    return line
+
 class TreeExtractor:
 
     def __init__(self,
@@ -151,7 +183,7 @@ class TreeExtractor:
 
     def get_snippets(self,
             file: File,
-            lines: typing.Set[int]) -> typing.Generator[typing.Tuple[int,Snippet],None,None]:
+            lines: Set[int]) -> Generator[Tuple[int,UAST,str],None,None]:
         subtrees = [(first_line(u), u) for u in extract_subtrees(
             uast=file.uast,
             min_depth=self.min_depth,
@@ -166,11 +198,7 @@ class TreeExtractor:
             if subtree.internal_type == 'Position':
                 return
             n += 1
-            ser = subtree.SerializeToString()
-            subtree = bblfsh.Node()
-            subtree.ParseFromString(ser)
-            snippet = Snippet.from_uast_blob(subtree, file.content.decode())
-            remove_positions(snippet.uast)
-
-            yield line, snippet
+            snippet = uast_blob_to_snippet(subtree, file.content.decode())
+            subtree = UAST.from_bblfsh(subtree)
+            yield line, subtree, snippet
         logging.debug('got relevant subtrees: %d', n)

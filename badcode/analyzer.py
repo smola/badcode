@@ -14,14 +14,10 @@ from lookout.sdk import service_analyzer_pb2
 from lookout.sdk import service_data_pb2_grpc
 from lookout.sdk import service_data_pb2
 
-from .bblfshutil import filter_node
 from .extract import TreeExtractor
 from .settings import *
 from .stats import Stats
 
-#TODO(smola): remove this
-from .bblfshutil import bblfsh_monkey_patch
-bblfsh_monkey_patch()
 
 #TODO(smola): set from single source
 version = "alpha"
@@ -79,18 +75,16 @@ class Analyzer(service_analyzer_pb2_grpc.AnalyzerServicer):
                 if opcode[0] in ('insert', 'replace'):
                     lines |= set(range(opcode[3]+1, opcode[4]+1))
 
-            for line, snippet in self.tree_extractor.get_snippets(
+            for line, uast, snippet in self.tree_extractor.get_snippets(
                     file=change.head,
                     lines=lines):
-                #TODO(smola): remove filter_node
-                filter_node(snippet.uast)
                 #TODO(smola): speed up matching
-                snippet = self.stats.match(snippet.uast)
-                if snippet:
+                matched = self.stats.match(uast)
+                if matched:
                     comment = service_analyzer_pb2.Comment(
                         file=change.head.path,
                         line=line,
-                        text="Something looks wrong here: %s" % snippet.uast)
+                        text="Something looks wrong here:\n```\n%s\n```" % matched[0])
                     comments.append(comment)
         logging.info("{} comments produced".format(len(comments)))
         return service_analyzer_pb2.EventResponse(analyzer_version=version, comments=comments)

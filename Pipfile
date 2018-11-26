@@ -12,6 +12,7 @@ lookout-sdk = "*"
 [dev-packages]
 pylint = "*"
 pytest = "*"
+rope = "*"
 
 [requires]
 python_version = "3.7"

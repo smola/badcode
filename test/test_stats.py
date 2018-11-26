@@ -2,20 +2,18 @@
 import unittest
 
 from bblfsh import Node
-from badcode.bblfshutil import Snippet
+from badcode.bblfshutil import UAST
 from badcode.stats import Stats
 
 def test_stats_iadd():
-    a = Node()
-    a.token = 'A'
-    a = Snippet(text='A', uast=a)
+    a = UAST(key=('A', 'A'))
 
     s1 = Stats()
-    s1.added('repo1', a)
+    s1.added('repo1', a, '')
     assert {'added': 1} == s1.totals[a]
 
     s2 = Stats()
-    s2.deleted('repo1', a)
+    s2.deleted('repo1', a, '')
     assert {'deleted': 1} == s2.totals[a]
 
     s3 = Stats()

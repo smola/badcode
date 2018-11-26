@@ -7,13 +7,14 @@ import typing
 
 from .stats import *
 from .bblfshutil import *
+from .bblfshutil import UAST
 from .ranker import Ranker
 from .treedist import single_node_merge_precalc
 from .treedist import TreeToSeq
 
 import bblfsh
 
-def score1(stats: Stats, key: Snippet) -> float:
+def score1(stats: Stats, key: UAST) -> float:
     s = stats.totals[key]
     if s['added'] > s['deleted']:
         return 0.0
@@ -25,7 +26,7 @@ def score1(stats: Stats, key: Snippet) -> float:
     total = float(s['added']+s['deleted'])
     return math.log(total+1) * s['deleted'] / total
 
-def score2(stats: Stats, key: Snippet) -> float:
+def score2(stats: Stats, key: UAST) -> float:
     s = stats.totals[key]
     if s['added'] > s['deleted']:
         return 0.0
@@ -50,7 +51,7 @@ def score2(stats: Stats, key: Snippet) -> float:
 
     return math.log(n_repos+1) / math.log(total_repos + 1) * neg_repos / n_repos
 
-def score_avg(stats: Stats, key: Snippet) -> float:
+def score_avg(stats: Stats, key: UAST) -> float:
     s = stats.totals[key]
     scores = [v for k, v in s.items() if k.startswith('score_')]
     return float(sum(scores)) / len(scores)
@@ -93,70 +94,67 @@ def print_top(stats: Stats, k: int) -> None:
     top = list(reversed(sorted(stats.totals.keys(), key=lambda x: stats.totals[x]['score'])))
     top = top[:k]
     print('TOTAL: %d' % len(stats.totals))
-    for n, s in enumerate(top):
+    for n, uast in enumerate(top):
         print('--- SNIPPET %d ---' % n)
-        print('STATS: %s' % stats.totals[s])
-        print('REPOS: %d' % len([1 for d in stats.per_repo.values() if s in d]))
+        print('STATS: %s' % stats.totals[uast])
+        print('REPOS: %d' % len([1 for d in stats.per_repo.values() if uast in d]))
         print('TEXT:')
-        print(s.text)
+        print(stats.text[uast])
         print('UAST:')
-        print(uast_pretty_format(s.uast))
+        print(uast_pretty_format(uast))
         print()
 
 def merge_same_text(stats: Stats) -> None:
     #FIXME: does not merge per_repo
     per_text = {}
-    for snippet, st in stats.totals.items():
-        if snippet.text not in per_text:
-            per_text[snippet.text] = (snippet, st)
+    for uast, st in stats.totals.items():
+        text = stats.text[uast]
+        if text not in per_text:
+            per_text[text] = (uast, st)
         else:
-            if uast_size(snippet.uast) > uast_size(per_text[snippet.text][0].uast):
-                per_text[snippet.text] = (snippet, st)
+            if len(uast) > len(per_text[text][0]):
+                per_text[text] = (uast, st)
     stats.totals = dict(per_text.values())
 
 def merge_similar(stats: Stats) -> None:
-    merged_snippets = {}
+    merged_uasts = {}
     merged_sizes = {}
-    snippets = []
-    positive_snippets = []
+    uasts = []
+    positive_uasts = []
     tts = TreeToSeq()
-    for snippet, sstats in stats.totals.items():
-        uast = snippet.uast
+    for uast, sstats in stats.totals.items():
         if len(uast.children) == 0:
             continue
         tree_seq = tts.tree_to_seq(uast)
         if sstats['added'] >= sstats['deleted']:
-            positive_snippets.append((snippet, sstats, tree_seq, uast))
+            positive_uasts.append((uast, sstats, tree_seq))
         else:
-            snippets.append((snippet, sstats, tree_seq, uast))
+            uasts.append((uast, sstats, tree_seq))
     tts = None
-    total = len(snippets)
+    total = len(uasts)
     proc = 0
-    for i, (snippet, sstats, tree_seq, uast) in enumerate(snippets):
+    for i, (uast, sstats, tree_seq) in enumerate(uasts):
         if proc % 1000 == 0:
             print('Processed: %d/%d)' % (proc, total))
         proc += 1
-        for osnippet, osstats, otree_seq, ouast in snippets[i+1:]:
+        for ouast, osstats, otree_seq in uasts[i+1:]:
             merged_uast = single_node_merge_precalc(uast, ouast, tree_seq, otree_seq)
             if merged_uast is None:
                 continue
-            merged_snippet = Snippet(uast=merged_uast, text='MERGED: ' + snippet.text)
-            lst = merged_snippets.get(merged_snippet, set([]))
-            lst.add(snippet)
-            lst.add(osnippet)
-            merged_snippets[merged_snippet] = lst
-            merged_sizes[merged_snippet] = len(tree_seq)
+            lst = merged_uasts.get(merged_uast, set([]))
+            lst.add(uast)
+            lst.add(ouast)
+            merged_uasts[merged_uast] = lst
+            merged_sizes[merged_uast] = len(tree_seq)
 
-    for snippet, lst in merged_snippets.items():
-        for snpt in lst:
-            stats.merge_snippet(dst=snippet, src=snpt, positive=False)
-        uast_size = merged_sizes[snippet]
-        for snpt in positive_snippets:
-            if uast_size != len(snpt[2]):
+    for merged_uast, lst in merged_uasts.items():
+        for ouast in lst:
+            stats.merge_uast(dst=merged_uast, src=ouast, positive=False)
+        for ouast, sstats, tree_seq in positive_uasts:
+            if len(merged_uast) != len(ouast):
                 continue
-            if uast_eq_wildcards(snippet.uast, snpt[3]):
-                st = stats.totals[snpt[0]]
-                stats.merge_snippet(dst=snippet, src=snpt[0], positive=True)
+            if uast.match(ouast):
+                stats.merge_uast(dst=merged_uast, src=ouast, positive=True)
 
 def postprocess(args):
     path = args.stats
@@ -171,6 +169,7 @@ def postprocess(args):
     if not os.path.exists(merged_path):
         if stats is None:
             stats = Stats.load(filename=path)
+        #TODO(smola): needed?
         print('--- POSTPROCESSING (merge same text) ---')
         merge_same_text(stats)
         print('--- POSTPROCESSING (merge with wildcards) ---')
@@ -187,7 +186,7 @@ def postprocess(args):
     if not os.path.exists(pruned_path):
         if stats is None:
             stats = Stats.load(filename=ranked_path)
-        min_score = 0.98
+        min_score = 0.8
         print('--- PRUNING ---')
         print('MIN_SCORE: %f' % min_score)
         print('BEFORE: %d' % len(stats.totals))

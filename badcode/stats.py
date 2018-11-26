@@ -2,34 +2,37 @@
 import collections
 import os.path
 import pickle
-import typing
+from typing import Optional, Tuple, Union
 
 import bblfsh
 
-from .bblfshutil import Snippet
+from .bblfshutil import UAST
 
 DEFAULT_STATS_DB = 'stats.db'
 
 class Stats:
     def __init__(self) -> None:
+        self.text = {}
         self.totals = {}
         self.per_repo = {}
 
-    def added(self, repo: str, element: Snippet) -> None:
-        self._add(repo, element, 'added')
+    def added(self, repo: str, uast: UAST, text: str) -> None:
+        self._add(repo, uast, text, 'added')
 
-    def deleted(self, repo: str, element: bblfsh.Node) -> None:
-        self._add(repo, element, 'deleted')
+    def deleted(self, repo: str, uast: UAST, text: str) -> None:
+        self._add(repo, uast, text, 'deleted')
 
-    def _add(self, repo: str, element: Snippet, key: str) -> None:
-        if element not in self.totals:
-            self.totals[element] = collections.defaultdict(int)
-        self.totals[element][key] += 1
+    def _add(self, repo: str, uast: UAST, text: str, key: str) -> None:
+        if uast not in self.text:
+            self.text[uast] = text
+        if uast not in self.totals:
+            self.totals[uast] = collections.defaultdict(int)
+        self.totals[uast][key] += 1
         if repo not in self.per_repo:
             self.per_repo[repo] = {}
-        if element not in self.per_repo[repo]:
-            self.per_repo[repo][element] = {'added': 0, 'deleted': 0}
-        self.per_repo[repo][element][key] += 1
+        if uast not in self.per_repo[repo]:
+            self.per_repo[repo][uast] = {'added': 0, 'deleted': 0}
+        self.per_repo[repo][uast][key] += 1
 
     def __iadd__(self, other: 'Stats') -> 'Stats':
         self._merge_dict_of_dicts_of_int_values(
@@ -40,6 +43,9 @@ class Stats:
                 self.per_repo[repo] = {}
             self._merge_dict_of_dicts_of_int_values(
                 self.per_repo[repo], val)
+        for uast, text in other.text.items():
+            if uast not in self.text:
+                self.text[uast] = text
         return self
 
     def _merge_dict_of_dicts_of_int_values(self, a, b):
@@ -55,12 +61,14 @@ class Stats:
             c[k] += v
         return c
 
-    def merge_snippet(self, dst: Snippet, src: Snippet, positive: bool) -> None:
+    def merge_uast(self, dst: UAST, src: UAST, positive: bool) -> None:
         self._merge_stats(self.totals, dst, src, positive)
         for d in self.per_repo.values():
             self._merge_stats(d, dst, src, positive)
+        if dst not in self.text:
+            self.text[dst] = self.text[src]
 
-    def _merge_stats(self, d, dst: Snippet, src: Snippet, positive: bool) -> None:
+    def _merge_stats(self, d, dst: UAST, src: UAST, positive: bool) -> None:
         if src not in d:
             return
         dst_stats = d.get(dst, collections.defaultdict(int))
@@ -89,8 +97,8 @@ class Stats:
             return Stats.load(filename)
         return Stats()
 
-    def match(self, node: bblfsh.Node) -> typing.Optional[Snippet]:
+    def match(self, uast: UAST) -> Optional[Tuple[UAST,str]]:
         for s in self.totals:
-            if s.match(node):
-                return s
+            if s.match(uast):
+                return (s, self.text[s])
         return None

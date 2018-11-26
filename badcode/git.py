@@ -225,7 +225,6 @@ class GitRepository:
                     'error': str(response.errors)})
                 return None
         uast = response.uast
-        #TODO(smola): remove this, do it later in Stats
         filter_node(uast)
         return uast
 
@@ -257,11 +256,11 @@ class GitRepositoryTrainer(GitRepository):
 
     def train(self, change: Change) -> None:
         logger.debug('processing change: %s' % change)
-        for line, snippet in self.tree_extractor.get_snippets(
+        for line, uast, snippet in self.tree_extractor.get_snippets(
                 file=change.base,
                 lines=change.deleted_lines):
-            self.stats.deleted(self.repo_name, snippet)
-        for line, snippet in self.tree_extractor.get_snippets(
+            self.stats.deleted(self.repo_name, uast, snippet)
+        for line, uast, snippet in self.tree_extractor.get_snippets(
                 file=change.head,
                 lines=change.added_lines):
-            self.stats.added(self.repo_name, snippet)
+            self.stats.added(self.repo_name, uast, snippet)
