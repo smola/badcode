@@ -61,16 +61,17 @@ class Stats:
             c[k] += v
         return c
 
-    def merge_uast(self, dst: UAST, src: UAST, positive: bool) -> None:
-        self._merge_stats(self.totals, dst, src, positive)
+    def merge_uast(self, dst: UAST, src: UAST) -> None:
+        self._merge_stats(self.totals, dst, src)
         for d in self.per_repo.values():
-            self._merge_stats(d, dst, src, positive)
+            self._merge_stats(d, dst, src)
         if dst not in self.text:
             self.text[dst] = self.text[src]
 
-    def _merge_stats(self, d, dst: UAST, src: UAST, positive: bool) -> None:
+    def _merge_stats(self, d, dst: UAST, src: UAST) -> None:
         if src not in d:
             return
+        positive = d[src]['added'] >= d[src]['deleted']            
         dst_stats = d.get(dst, collections.defaultdict(int))
         src_stats = d[src]
         dst_stats['added'] += src_stats['added']

@@ -14,42 +14,19 @@ from .treedist import TreeToSeq
 
 import bblfsh
 
+
 def score1(stats: Stats, key: UAST) -> float:
     s = stats.totals[key]
-    if s['added'] > s['deleted']:
-        return 0.0
-
-    if 'merged' in s:
-        if s['merged_positive'] >= s['merged_negative']:
-            return 0.0
-
-    total = float(s['added']+s['deleted'])
-    return math.log(total+1) * s['deleted'] / total
-
-def score2(stats: Stats, key: UAST) -> float:
-    s = stats.totals[key]
-    if s['added'] > s['deleted']:
-        return 0.0
-
-    if 'merged' in s:
-        if s['merged_positive'] >= s['merged_negative']:
-            return 0.0
-
     total_repos = len(stats.per_repo)
-    n_repos = 0
-    neg_repos = 0
+    score = 0.0
     for d in stats.per_repo.values():
         if key not in d:
             continue
-        n_repos += 1
         s = d[key]
-        if s['deleted'] >= s['added']:
-            neg_repos += 1
-
-    if neg_repos <= (n_repos - neg_repos):
-        return 0.0
-
-    return math.log(n_repos+1) / math.log(total_repos + 1) * neg_repos / n_repos
+        total = s['deleted'] + s['added']
+        diff = s['deleted'] - s['added']
+        score += math.log(1+total) * diff / total
+    return score / total_repos
 
 def score_avg(stats: Stats, key: UAST) -> float:
     s = stats.totals[key]
@@ -57,31 +34,17 @@ def score_avg(stats: Stats, key: UAST) -> float:
     return float(sum(scores)) / len(scores)
 
 def compute_ranking(stats: Stats) -> None:
-    rankers = [
-        Ranker(lambda x: score1(stats, x)),
-        Ranker(lambda x: score2(stats, x)),
-    ]
-    
-    for s in stats.totals:
-        for r in rankers:
-            r.add(s)
+    for uast in stats.totals:
+        s = stats.totals[uast]
+        s['score_1'] = score1(stats, uast)
 
-    for r in rankers:
-        r.finalize()
-
-    for snpt in stats.totals:
-        s = stats.totals[snpt]
-        for i, r in enumerate(rankers):
-            s['score_%d' % (i+1)] = r.get(snpt)
-
-    rankers = None
     r = Ranker(lambda x: score_avg(stats, x))
     for s in stats.totals:
         r.add(s)
     r.finalize()
-    for snpt in stats.totals:
-        s = stats.totals[snpt]
-        s['score'] = r.get(snpt)
+    for uast in stats.totals:
+        s = stats.totals[uast]
+        s['score'] = r.get(uast)
 
 def prune(stats: Stats, min_score: float) -> None:
     stats.totals = dict([(k, v) for k, v in stats.totals.items() if v['score'] >= min_score])
@@ -117,44 +80,26 @@ def merge_same_text(stats: Stats) -> None:
     stats.totals = dict(per_text.values())
 
 def merge_similar(stats: Stats) -> None:
-    merged_uasts = {}
-    merged_sizes = {}
     uasts = []
-    positive_uasts = []
     tts = TreeToSeq()
-    for uast, sstats in stats.totals.items():
+    for uast in stats.totals.keys():
         if len(uast.children) == 0:
             continue
         tree_seq = tts.tree_to_seq(uast)
-        if sstats['added'] >= sstats['deleted']:
-            positive_uasts.append((uast, sstats, tree_seq))
-        else:
-            uasts.append((uast, sstats, tree_seq))
+        uasts.append((uast, tree_seq))
     tts = None
     total = len(uasts)
     proc = 0
-    for i, (uast, sstats, tree_seq) in enumerate(uasts):
+    for i, (uast, tree_seq) in enumerate(uasts):
         if proc % 1000 == 0:
             print('Processed: %d/%d)' % (proc, total))
         proc += 1
-        for ouast, osstats, otree_seq in uasts[i+1:]:
+        for ouast, otree_seq in uasts[i+1:]:
             merged_uast = single_node_merge_precalc(uast, ouast, tree_seq, otree_seq)
             if merged_uast is None:
                 continue
-            lst = merged_uasts.get(merged_uast, set([]))
-            lst.add(uast)
-            lst.add(ouast)
-            merged_uasts[merged_uast] = lst
-            merged_sizes[merged_uast] = len(tree_seq)
-
-    for merged_uast, lst in merged_uasts.items():
-        for ouast in lst:
-            stats.merge_uast(dst=merged_uast, src=ouast, positive=False)
-        for ouast, sstats, tree_seq in positive_uasts:
-            if len(merged_uast) != len(ouast):
-                continue
-            if uast.match(ouast):
-                stats.merge_uast(dst=merged_uast, src=ouast, positive=True)
+            stats.merge_uast(dst=merged_uast, src=uast)
+            stats.merge_uast(dst=merged_uast, src=ouast)
 
 def postprocess(args):
     path = args.stats
