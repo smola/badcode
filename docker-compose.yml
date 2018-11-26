@@ -1,0 +1,40 @@
+version: '3.6'
+services:
+  bblfshd:
+    image: bblfsh/bblfshd:v2.9.2-drivers
+    privileged: true
+    networks:
+      - main
+  train:
+    build: .
+    volumes:
+    - ./data:/code/data
+    command:
+    - 'train'
+    - '--bblfshd'
+    - 'bblfshd:9432'
+    - '/code/data/repos.txt'
+    links:
+    - bblfshd
+    networks:
+    - main
+  inspect:
+    build: .
+    volumes:
+    - ./data:/code/data
+    command:
+    - 'inspect'
+    links:
+    - bblfshd
+    networks:
+    - main
+  analyzer:
+    build: .
+    volumes:
+    - ./data:/code/data
+    command:
+    - 'analyzer'
+    ports:
+    - '2022:2022'
+networks:
+  main:
