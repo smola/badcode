@@ -15,18 +15,22 @@ from .treedist import TreeToSeq
 
 import bblfsh
 
+def per_repo_score1(stats: Stats, key: UAST, repo: str) -> float:
+    if repo not in stats.per_repo:
+        return 0.0
+    if key not in stats.per_repo[repo]:
+        return 0.0
+    s = stats.per_repo[repo][key]
+    total = s['deleted'] + s['added']
+    diff = s['deleted'] - s['added']
+    return float(diff) / total
 
 def score1(stats: Stats, key: UAST) -> float:
     s = stats.totals[key]
     total_repos = len(stats.per_repo)
     score = 0.0
-    for d in stats.per_repo.values():
-        if key not in d:
-            continue
-        s = d[key]
-        total = s['deleted'] + s['added']
-        diff = s['deleted'] - s['added']
-        score += math.log(1+total) * diff / total
+    for repo in stats.per_repo.keys():
+        score += per_repo_score1(stats, key, repo)
     return score / total_repos
 
 def score_avg(stats: Stats, key: UAST) -> float:
