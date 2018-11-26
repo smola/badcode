@@ -35,11 +35,11 @@ mkdir "$DATA_DIR"
 # Create a file with GitHub repositories (`org/name`) to train with
 echo "src-d/gitbase" > "$DATA_DIR/repos.txt"
 
-# Preprocessing
-docker run -v "$DATA_DIR":/code/data smolav/badcode preprocess /code/data/data/repos.txt
+# Train
+docker run -v "$DATA_DIR":/code/data smolav/badcode train /code/data/data/repos.txt
 
-# Postprocessing
-docker run -v "$DATA_DIR":/code/data smolav/badcode postprocess
+# Inspect model
+docker run -v "$DATA_DIR":/code/data smolav/badcode inspect
 
 # Start analyzer
 docker run -v "$DATA_DIR":/code/data smolav/badcode analyzer

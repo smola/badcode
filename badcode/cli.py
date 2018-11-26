@@ -5,6 +5,7 @@ import os
 from .analyzer import serve
 from .postprocess import postprocess
 from .preprocess import preprocess
+from .inspect import inspect
 from .settings import *
 
 def main():
@@ -18,15 +19,19 @@ def main():
     analyzer_parser.add_argument('--model', type=str, default=os.environ.get('BADCODE_MODEL', str(DEFAULT_STATS_PATH) + '_merged_ranked_pruned'))
     analyzer_parser.set_defaults(func=serve)
 
-    preprocess_parser = subparsers.add_parser('preprocess', help='preprocess repositories')
-    preprocess_parser.add_argument('repositories', type=str)
-    preprocess_parser.set_defaults(func=preprocess)
+    def train(args):
+        preprocess(args)
+        postprocess(args)
 
-    postprocess_parser = subparsers.add_parser('postprocess', help='postprocess stats')
-    postprocess_parser.add_argument('--stats', type=str, default=str(DEFAULT_STATS_PATH))
-    postprocess_parser.set_defaults(func=postprocess)
+    train_parser = subparsers.add_parser('train', help='train with repositories')
+    train_parser.add_argument('--stats', type=str, default=str(DEFAULT_STATS_PATH))
+    train_parser.add_argument('repositories', type=str)
+    train_parser.set_defaults(func=train)
 
-
+    inspect_parser = subparsers.add_parser('inspect', help='inspect model')
+    inspect_parser.add_argument('--stats', type=str, default=str(DEFAULT_STATS_PATH))
+    inspect_parser.set_defaults(func=inspect)
+ 
     args = parser.parse_args()
     args.func(args)
 

@@ -6,6 +6,7 @@ import sys
 import typing
 
 from .stats import *
+from .settings import *
 from .bblfshutil import *
 from .bblfshutil import UAST
 from .ranker import Ranker
@@ -53,20 +54,6 @@ def prune(stats: Stats, min_score: float) -> None:
             if snpt not in stats.totals:
                 del d[snpt]
 
-def print_top(stats: Stats, k: int) -> None:
-    top = list(reversed(sorted(stats.totals.keys(), key=lambda x: stats.totals[x]['score'])))
-    top = top[:k]
-    print('TOTAL: %d' % len(stats.totals))
-    for n, uast in enumerate(top):
-        print('--- SNIPPET %d ---' % n)
-        print('STATS: %s' % stats.totals[uast])
-        print('REPOS: %d' % len([1 for d in stats.per_repo.values() if uast in d]))
-        print('TEXT:')
-        print(stats.text[uast])
-        print('UAST:')
-        print(uast_pretty_format(uast))
-        print()
-
 def merge_same_text(stats: Stats) -> None:
     #FIXME: does not merge per_repo
     per_text = {}
@@ -92,7 +79,7 @@ def merge_similar(stats: Stats) -> None:
     proc = 0
     for i, (uast, tree_seq) in enumerate(uasts):
         if proc % 1000 == 0:
-            print('Processed: %d/%d)' % (proc, total))
+            logger.info('Processed: %d/%d)' % (proc, total))
         proc += 1
         for ouast, otree_seq in uasts[i+1:]:
             merged_uast = single_node_merge_precalc(uast, ouast, tree_seq, otree_seq)
@@ -109,38 +96,35 @@ def postprocess(args):
     pruned_path = ranked_path + '_pruned'
 
     stats = None
-    print('--- LOADING STATS ---')
 
     if not os.path.exists(merged_path):
         if stats is None:
+            logger.info('Loading stats: %s' % path)
             stats = Stats.load(filename=path)
-        #TODO(smola): needed?
-        print('--- POSTPROCESSING (merge same text) ---')
+        logger.info('Merging same text')
         merge_same_text(stats)
-        print('--- POSTPROCESSING (merge with wildcards) ---')
+        logger.info('Merging similar trees with wildcards')
         merge_similar(stats)
+        logger.info('Saving stats (merged): %s' % merged_path)
         stats.save(filename=merged_path)
     
     if not os.path.exists(ranked_path):
         if stats is None:
+            logger.info('Loading stats (merged): %s' % merged_path)
             stats = Stats.load(filename=merged_path)
-        print('--- RANKING ---')
+        logger.info('Ranking')
         compute_ranking(stats)
+        logger.info('Saving stats (ranked): %s' % ranked_path)
         stats.save(filename=ranked_path)
 
     if not os.path.exists(pruned_path):
         if stats is None:
+            logger.info('Loading stats (ranked): %s' % ranked_path)
             stats = Stats.load(filename=ranked_path)
         min_score = 0.8
-        print('--- PRUNING ---')
-        print('MIN_SCORE: %f' % min_score)
-        print('BEFORE: %d' % len(stats.totals))
+        logger.info('Pruning (min_score=%f)' % min_score)
+        logger.info('Before pruning: %d' % len(stats.totals))
         prune(stats, min_score=min_score)
-        print('AFTER: %d' % len(stats.totals))
+        logger.info('After pruning: %d' % len(stats.totals))
+        logger.info('Saving stats (pruned): %s' % pruned_path)
         stats.save(filename=pruned_path)
-
-    if stats is None:
-        stats = Stats.load(filename=pruned_path)
-
-    print('--- TOP ---')
-    print_top(stats, k=50)
