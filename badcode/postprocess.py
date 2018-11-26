@@ -69,24 +69,44 @@ def merge_same_text(stats: Stats) -> None:
 def merge_similar(stats: Stats) -> None:
     uasts = []
     tts = TreeToSeq()
-    for uast in stats.totals.keys():
+    for uast, sstats in stats.totals.items():
         if len(uast.children) == 0:
             continue
         tree_seq = tts.tree_to_seq(uast)
-        uasts.append((uast, tree_seq))
+        uasts.append((uast, tree_seq, sstats))
     tts = None
     total = len(uasts)
     proc = 0
-    for i, (uast, tree_seq) in enumerate(uasts):
+    positive_uasts = {}
+    negative_uasts = {}
+    for i, (uast, tree_seq, sstats) in enumerate(uasts):
         if proc % 1000 == 0:
             logger.info('Processed: %d/%d)' % (proc, total))
         proc += 1
-        for ouast, otree_seq in uasts[i+1:]:
+        for ouast, otree_seq, osstats in uasts[i+1:]:
             merged_uast = single_node_merge_precalc(uast, ouast, tree_seq, otree_seq)
             if merged_uast is None:
                 continue
+            if sstats['added'] >= sstats['deleted']:
+                s = positive_uasts.get(merged_uast, set([]))
+                s.add(uast)
+                positive_uasts[merged_uast] = s
+            else:
+                s = negative_uasts.get(merged_uast, set([]))
+                s.add(uast)
+                negative_uasts[merged_uast] = s
+            if osstats['added'] >= osstats['deleted']:
+                s = positive_uasts.get(merged_uast, set([]))
+                s.add(ouast)
+                positive_uasts[merged_uast] = s
+            else:
+                s = negative_uasts.get(merged_uast, set([]))
+                s.add(ouast)
+                negative_uasts[merged_uast] = s
+    for merged_uast, uast_set in negative_uasts.items():
+        uast_set = uast_set & negative_uasts.get(merged_uast, set([]))
+        for uast in uast_set:
             stats.merge_uast(dst=merged_uast, src=uast)
-            stats.merge_uast(dst=merged_uast, src=ouast)
 
 def postprocess(args):
     path = args.stats
