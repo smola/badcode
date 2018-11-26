@@ -23,16 +23,43 @@ The main interface to apply the model is the [lookout](https://github.com/src-d/
 
 This project is still in very early stage. Running over a few dozen (small) repositories is possible. The model is still quite immature and it will produce a lot of mispredictions. There are a few pieces hardcoded to analyze Go only.
 
+## Getting Started
+
+### With Docker
+
+```bash
+# Create a data directory
+DATA_DIR="$(pwd)/data"
+mkdir "$DATA_DIR"
+
+# Create a file with GitHub repositories (`org/name`) to train with
+echo "src-d/gitbase" > "$DATA_DIR/repos.txt"
+
+# Preprocessing
+docker run -v "$DATA_DIR":/code/data smolav/badcode preprocess /code/data/data/repos.txt
+
+# Postprocessing
+docker run -v "$DATA_DIR":/code/data smolav/badcode postprocess
+
+# Start analyzer
+docker run -v "$DATA_DIR":/code/data smolav/badcode analyzer
+```
+
+### From Sources
+
+libgit2 v0.27.0 is required. It can be installed inside a virtual environment. See `install.sh` for an example.
+
+```
+pipenv shell
+pip install -e .
+```
+
 ## Roadmap
 
 - Support running on multiple language at the same time, producing one model per language.
 - Use a better internal representation of trees to get smaller models and faster evaluation.
 - Automate it end to end so that it can be deployed as a lookout analyzer without offline model training.
 - Publish a Docker image.
-
-## Install
-
-TODO. If you really want to use this (you don't, yet), then you'll find your way with `pipenv`, `pip install -e .` and `badcode --help`.
 
 ## License
 

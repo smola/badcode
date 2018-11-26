@@ -1,8 +1,7 @@
 FROM ubuntu:bionic
 
-ADD badcode /code/badcode
-ADD setup.py /code/
-ADD requirements.txt /code/
+ENV LIBGIT2_VERSION=0.27.0
+
 WORKDIR /code
 
 RUN \
@@ -11,14 +10,18 @@ RUN \
 	rm -rf /var/lib/apt/lists
 
 RUN \
-	wget https://github.com/libgit2/libgit2/archive/v0.27.0.tar.gz && \
-	tar xzf v0.27.0.tar.gz && \
-	cd libgit2-0.27.0/ && \
+	wget https://github.com/libgit2/libgit2/archive/v${LIBGIT2_VERSION}.tar.gz && \
+	tar xzf v${LIBGIT2_VERSION}.tar.gz && \
+	cd libgit2-${LIBGIT2_VERSION}/ && \
 	cmake . -DCMAKE_INSTALL_PREFIX=/usr && \
 	make && \
 	make install && \
 	cd /code && \
-	rm -rf v0.27.0.tar.gz libgit2-0.27.0/
+	rm -rf v${LIBGIT2_VERSION}.tar.gz libgit2-${LIBGIT2_VERSION}/
+
+ADD badcode /code/badcode
+ADD setup.py /code/
+ADD requirements.txt /code/
 
 RUN \
 	cd /code && \
