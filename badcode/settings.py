@@ -17,5 +17,7 @@ DEFAULT_STATS_PATH = DEFAULT_DATA_DIR / 'stats.db'
 #XXX: To avoid bblfsh downscaling, we set workers to CPUs+1
 DEFAULT_WORKERS = multiprocessing.cpu_count() + 1
 
+DEFAULT_BBLFSHD = '0.0.0.0:9432'
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)

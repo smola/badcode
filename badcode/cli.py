@@ -25,6 +25,7 @@ def main():
 
     train_parser = subparsers.add_parser('train', help='train with repositories')
     train_parser.add_argument('--stats', type=str, default=str(DEFAULT_STATS_PATH))
+    train_parser.add_argument('--bblfshd', type=str, default=DEFAULT_BBLFSHD)
     train_parser.add_argument('repositories', type=str)
     train_parser.set_defaults(func=train)
 
