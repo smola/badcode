@@ -9,7 +9,7 @@ grpcio-tools==1.13.0
 grpcio==1.13.0
 idna==2.7
 lookout-sdk==0.1.2
-protobuf==3.6.1
+protobuf==3.18.3
 pycparser==2.19
 pygit2==0.27.2
 requests==2.20.1
